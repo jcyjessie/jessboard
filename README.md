@@ -1,6 +1,6 @@
-# Focusboard
+# Jessboard
 
-Focusboard is a small, personal task-management panel for planning the day, keeping projects moving, and protecting focus time. It runs entirely in the browser and saves the board on the current device.
+Jessboard is a small, personal task-management panel for planning the day, keeping projects moving, and protecting focus time. It runs entirely in the browser and saves the board on the current device.
 
 ## What it includes
 
@@ -22,7 +22,7 @@ Open the panel in a browser and check that task creation, completion, deletion, 
 
 The information-dense, local-first planning approach was inspired by [JessamyH/jh-task-tracker](https://github.com/JessamyH/jh-task-tracker). Thank you to JessamyH for sharing that project under the MIT License.
 
-Focusboard is a separate implementation: it uses original HTML, CSS, JavaScript, structure, wording, and sample content.
+Jessboard is a separate implementation: it uses original HTML, CSS, JavaScript, structure, wording, and sample content.
 
 ## Search log
 

@@ -1,5 +1,6 @@
-// Focusboard behavior renders the dashboard and keeps personal data in local storage.
-const storageKey = "focusboard-data-v1";
+// Jessboard behavior renders the dashboard and keeps personal data in local storage.
+const storageKey = "jessboard-data-v1";
+const legacyStorageKey = "focusboard-data-v1";
 const defaultData = {
   focusMinutes: 168,
   selectedTaskId: "task-1",
@@ -22,7 +23,7 @@ let timerId = null;
 
 // Load saved information or create a fresh personal board.
 function loadData() {
-  try { return JSON.parse(localStorage.getItem(storageKey)) || structuredClone(defaultData); }
+  try { return JSON.parse(localStorage.getItem(storageKey)) || JSON.parse(localStorage.getItem(legacyStorageKey)) || structuredClone(defaultData); }
   catch { return structuredClone(defaultData); }
 }
 

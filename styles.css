@@ -1,4 +1,4 @@
-/* Focusboard styles define the compact dashboard layout used by index.html. */
+/* Jessboard styles define the compact dashboard layout used by index.html. */
 :root { --ink:#17231f; --muted:#69766f; --line:#dbe4dc; --canvas:#f5f6f1; --surface:#ffffff; --sidebar:#1c332b; --sidebar-muted:#9cb8a8; --teal:#28786c; --teal-pale:#e2f1ed; --coral:#d9654c; --coral-pale:#fbe8e2; --yellow:#d39b2b; --yellow-pale:#fdf3dc; --blue:#3d7196; --blue-pale:#e7f0f6; --shadow:0 9px 22px rgba(23,35,31,.06); }
 body.dark { --ink:#eef4ef; --muted:#b6c2bb; --line:#31443a; --canvas:#16201b; --surface:#202c26; --sidebar:#102019; --sidebar-muted:#94ad9e; --teal-pale:#173d36; --coral-pale:#492b26; --yellow-pale:#493b1f; --blue-pale:#213a4d; --shadow:none; }
 * { box-sizing:border-box; }
