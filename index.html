@@ -1,0 +1,100 @@
+<!-- Focusboard is a self-contained personal task management panel. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A calm, local-first task management panel." />
+    <title>Focusboard</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#dashboard" aria-label="Focusboard dashboard">
+          <span class="brand-mark"><i data-lucide="orbit"></i></span>
+          <span>Focusboard</span>
+        </a>
+
+        <div class="workspace-label">Personal space</div>
+        <nav class="nav-list" aria-label="Main navigation">
+          <button class="nav-item active" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Overview</button>
+          <button class="nav-item" data-view="today"><i data-lucide="sun"></i>Today</button>
+          <button class="nav-item" data-view="projects"><i data-lucide="kanban-square"></i>Projects</button>
+          <button class="nav-item" data-view="focus"><i data-lucide="timer"></i>Focus</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="sync-note"><i data-lucide="lock-keyhole"></i><span>Saved on this device</span></div>
+          <button class="profile-button" type="button"><span class="avatar">Y</span><span>Your workspace</span><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="page-kicker">Wednesday, July 22</p>
+            <h1 id="page-title">Make today count.</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch color mode" title="Switch color mode"><i data-lucide="moon"></i></button>
+            <button class="primary-button" id="open-task-dialog" type="button"><i data-lucide="plus"></i>New task</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard-view" data-view-panel="dashboard">
+          <div class="insight-grid" id="insight-grid"></div>
+          <div class="content-grid overview-grid">
+            <section class="panel task-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Next up</p><h2>My priorities</h2></div>
+                <button class="text-button" data-go-to="today" type="button">See all <i data-lucide="arrow-up-right"></i></button>
+              </div>
+              <div class="task-list" id="priority-list"></div>
+            </section>
+            <section class="panel rhythm-panel">
+              <div class="panel-heading"><div><p class="eyebrow">This week</p><h2>Work rhythm</h2></div><span class="status-chip coral">On track</span></div>
+              <div class="week-bars" id="week-bars" aria-label="Weekly focus time"></div>
+              <div class="rhythm-summary"><div><strong id="focus-hours">0h 00m</strong><span>focused</span></div><div><strong id="completed-count">0</strong><span>tasks done</span></div></div>
+            </section>
+          </div>
+          <section class="panel projects-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Active work</p><h2>Projects in motion</h2></div><button class="text-button" data-go-to="projects" type="button">Open board <i data-lucide="arrow-up-right"></i></button></div>
+            <div class="project-cards" id="project-cards"></div>
+          </section>
+        </section>
+
+        <section class="view" id="today-view" data-view-panel="today">
+          <div class="view-intro"><div><p class="eyebrow">Your plan</p><h2>Today’s task list</h2></div><button class="secondary-button" id="clear-completed" type="button"><i data-lucide="check-check"></i>Clear completed</button></div>
+          <section class="panel all-tasks-panel"><div class="task-list large" id="all-task-list"></div></section>
+        </section>
+
+        <section class="view" id="projects-view" data-view-panel="projects">
+          <div class="view-intro"><div><p class="eyebrow">Delivery view</p><h2>Project board</h2></div><span class="status-chip blue">Drag-free planning</span></div>
+          <div class="kanban-board" id="kanban-board"></div>
+        </section>
+
+        <section class="view" id="focus-view" data-view-panel="focus">
+          <div class="focus-layout">
+            <section class="panel timer-panel"><p class="eyebrow">Focus session</p><h2>One thing at a time.</h2><div class="timer-display" id="timer-display">25:00</div><p class="timer-task" id="timer-task">Choose a task, then begin.</p><div class="timer-actions"><button class="primary-button" id="timer-start" type="button"><i data-lucide="play"></i>Start focus</button><button class="icon-button" id="timer-reset" type="button" aria-label="Reset focus timer" title="Reset focus timer"><i data-lucide="rotate-ccw"></i></button></div></section>
+            <section class="panel focus-task-panel"><div class="panel-heading"><div><p class="eyebrow">Session target</p><h2>Pick a task</h2></div></div><div class="focus-task-options" id="focus-task-options"></div></section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="task-dialog" id="task-dialog">
+      <form id="task-form" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">Add momentum</p><h2>New task</h2></div><button class="icon-button" id="close-task-dialog" type="button" aria-label="Close task form" title="Close"><i data-lucide="x"></i></button></div>
+        <label>Task name<input id="task-title" name="title" type="text" required maxlength="80" placeholder="What needs your attention?" /></label>
+        <div class="form-row"><label>Project<select id="task-project" name="project"></select></label><label>Priority<select id="task-priority" name="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label></div>
+        <div class="form-row"><label>Status<select id="task-status" name="status"><option value="todo" selected>Planned</option><option value="progress">In progress</option><option value="review">Review</option></select></label><label>Due date<input id="task-due" name="due" type="date" /></label></div>
+        <div class="dialog-actions"><button class="secondary-button" id="cancel-task-dialog" type="button">Cancel</button><button class="primary-button" type="submit"><i data-lucide="plus"></i>Add task</button></div>
+      </form>
+    </dialog>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
