@@ -1,2 +1,4 @@
-# Local operating system and editor files do not belong in this project.
+node_modules/
+CONTEXT.md
+data/context.json
 .DS_Store

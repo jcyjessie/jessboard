@@ -1,0 +1,12 @@
+[
+  { "name": "BBC World", "category": "world", "url": "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { "name": "The Guardian World", "category": "world", "url": "https://www.theguardian.com/world/rss" },
+  { "name": "NPR World", "category": "world", "url": "https://feeds.npr.org/1001/rss.xml" },
+  { "name": "PBS NewsHour", "category": "world", "url": "https://www.pbs.org/newshour/feeds/rss/headlines" },
+  { "name": "TechCrunch", "category": "technology", "url": "https://techcrunch.com/feed/" },
+  { "name": "The Verge", "category": "technology", "url": "https://www.theverge.com/rss/index.xml" },
+  { "name": "Ars Technica", "category": "technology", "url": "https://feeds.arstechnica.com/arstechnica/technology-lab" },
+  { "name": "Hacker News", "category": "technology", "url": "https://hnrss.org/frontpage" },
+  { "name": "MIT Technology Review", "category": "technology", "url": "https://www.technologyreview.com/feed/" },
+  { "name": "VentureBeat AI", "category": "ai", "url": "https://venturebeat.com/category/ai/feed/" }
+]
