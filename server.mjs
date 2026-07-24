@@ -15,6 +15,7 @@ const translationCache = new Map();
 const ollamaCache = new Map();
 let worldMonitorDetail = "本地 RSS · 原文";
 let weatherCache = { expiresAt: 0, data: null };
+let contextRefreshPromise = null;
 const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", textNodeName: "#text", trimValues: true });
 
 // Return JSON with consistent headers for the browser client.
@@ -228,6 +229,25 @@ async function loadNews() {
 // Read the local context snapshot written by the sync command.
 async function loadContext() { try { return JSON.parse(await fs.readFile(path.join(root, "data", "context.json"), "utf8")); } catch { return { codex: [], feishu: { tasks: [], schedule: [], notes: [], messages: [] }, sources: { codex: "empty", feishu: "not-configured" } }; } }
 
+// Run one local read-only snapshot refresh and share it with concurrent dashboard requests.
+function refreshContext() {
+  if (contextRefreshPromise) return contextRefreshPromise;
+  contextRefreshPromise = new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["sync.mjs"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    const timeout = setTimeout(() => child.kill("SIGTERM"), 120000);
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.stderr.on("data", (chunk) => { output += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) resolve();
+      else reject(new Error(output.trim() || "Snapshot refresh failed."));
+    });
+  }).finally(() => { contextRefreshPromise = null; });
+  return contextRefreshPromise;
+}
+
 // Serve a requested static file from the repository without allowing path traversal.
 async function serveStatic(requestPath, response) {
   const pathname = requestPath === "/" ? "/index.html" : requestPath;
@@ -247,7 +267,8 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestUrl.pathname === "/api/news") { try { sendJson(response, 200, await loadNews()); } catch (error) { sendJson(response, 502, { error: error.message }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/weather/shanghai") { try { sendJson(response, 200, await loadShanghaiWeather()); } catch (error) { sendJson(response, 502, { error: `上海天气暂不可用：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/context") { sendJson(response, 200, await loadContext()); return; }
-  if (request.method === "GET" && requestUrl.pathname === "/api/dev-metrics") { try { sendJson(response, 200, await loadDevelopmentMetrics()); } catch (error) { sendJson(response, 502, { error: `开发数据暂不可用：${error.message}` }); } return; }
+  if (request.method === "POST" && requestUrl.pathname === "/api/context/refresh") { try { await refreshContext(); sendJson(response, 200, await loadContext()); } catch (error) { sendJson(response, 502, { error: `同步失败：${error.message}` }); } return; }
+  if (request.method === "GET" && requestUrl.pathname === "/api/dev-metrics") { try { const range = ["24h", "7d", "30d", "all"].includes(requestUrl.searchParams.get("range")) ? requestUrl.searchParams.get("range") : "all"; sendJson(response, 200, await loadDevelopmentMetrics(range)); } catch (error) { sendJson(response, 502, { error: `开发数据暂不可用：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/health") { sendJson(response, 200, { ok: true, service: "jessboard" }); return; }
   if (request.method === "GET") { await serveStatic(requestUrl.pathname, response); return; }
   sendJson(response, 405, { error: "Method not allowed" });

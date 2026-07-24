@@ -12,19 +12,19 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="brand" href="#dashboard" aria-label="Jessboard 总览">
+        <div class="sidebar-brand-row"><a class="brand" href="#dashboard" aria-label="Jessboard 总览">
           <span class="brand-mark"><i data-lucide="orbit"></i></span>
           <span>Jessboard</span>
-        </a>
+        </a><button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-label="收起侧边栏" title="收起侧边栏"><i data-lucide="panel-left-close"></i></button></div>
 
         <div class="workspace-label">个人工作台</div>
         <nav class="nav-list" aria-label="主导航">
-          <button class="nav-item active" data-view="dashboard" type="button"><i data-lucide="layout-dashboard"></i><span>总览</span></button>
-          <button class="nav-item" data-view="today" type="button"><i data-lucide="check-square-2"></i><span>我的任务</span></button>
-          <button class="nav-item" data-view="projects" type="button"><i data-lucide="kanban-square"></i><span>项目排期</span></button>
-          <button class="nav-item" data-view="focus" type="button"><i data-lucide="timer"></i><span>专注</span></button>
-          <button class="nav-item" data-view="dev" type="button"><i data-lucide="activity"></i><span>开发分析</span></button>
-          <button class="nav-item" data-view="news" type="button"><i data-lucide="newspaper"></i><span>咨询</span><span class="nav-badge" id="news-nav-count">0</span></button>
+          <button class="nav-item active" data-view="dashboard" type="button" title="总览"><i data-lucide="layout-dashboard"></i><span>总览</span></button>
+          <button class="nav-item" data-view="today" type="button" title="我的任务"><i data-lucide="check-square-2"></i><span>我的任务</span></button>
+          <button class="nav-item" data-view="projects" type="button" title="项目排期"><i data-lucide="kanban-square"></i><span>项目排期</span></button>
+          <button class="nav-item" data-view="focus" type="button" title="专注"><i data-lucide="timer"></i><span>专注</span></button>
+          <button class="nav-item" data-view="dev" type="button" title="开发分析"><i data-lucide="activity"></i><span>开发分析</span></button>
+          <button class="nav-item" data-view="news" type="button" title="资讯"><i data-lucide="newspaper"></i><span>咨询</span><span class="nav-badge" id="news-nav-count">0</span></button>
         </nav>
 
         <div class="sidebar-footer">
@@ -37,9 +37,11 @@
         <header class="topbar">
           <div>
             <p class="eyebrow" id="page-kicker">星期三，7 月 22 日</p>
-            <h1 id="page-title">把重要的事做好。</h1>
+            <h1 id="page-title">保持对世界的感知。</h1>
+            <p class="quote-author" id="quote-author">- Marcus Aurelius</p>
           </div>
           <div class="topbar-actions">
+            <div class="language-toggle global-language-toggle" role="group" aria-label="页面语言"><button class="filter-tab active" data-news-language="zh" type="button">中文</button><button class="filter-tab" data-news-language="en" type="button">English</button></div>
             <button class="icon-button" id="theme-toggle" type="button" aria-label="切换深色模式" title="切换深色模式"><i data-lucide="moon"></i></button>
             <button class="primary-button" id="open-task-dialog" type="button"><i data-lucide="plus"></i>新建任务</button>
           </div>
@@ -48,20 +50,16 @@
         <section class="view active" id="dashboard-view" data-view-panel="dashboard">
           <div class="welcome-row">
             <div><p class="eyebrow">今日工作台</p><h2>你好，Jessie <span class="wave">✦</span></h2><p class="muted-copy">把来自 Codex、飞书和灵感流的事项，收拢到一个清晰的节奏里。</p></div>
-            <div class="date-chip"><i data-lucide="calendar-days"></i><span id="today-date">2026 年 7 月 22 日</span></div>
           </div>
           <div class="insight-grid" id="insight-grid"></div>
-          <div class="content-grid overview-grid">
-            <section class="panel task-panel">
-              <div class="panel-heading"><div><p class="eyebrow">优先处理</p><h2>接下来做什么</h2></div><button class="text-button" data-go-to="today" type="button">查看全部 <i data-lucide="arrow-up-right"></i></button></div>
-              <div class="task-list" id="priority-list"></div>
-            </section>
-            <section class="panel rhythm-panel">
-              <div class="panel-heading"><div><p class="eyebrow">本周节奏</p><h2>专注时间</h2></div><span class="status-chip green">进行中</span></div>
-              <div class="week-bars" id="week-bars" aria-label="每周专注时间"></div>
-              <div class="rhythm-summary"><div><strong id="focus-hours">0 小时 00 分</strong><span>累计专注</span></div><div><strong id="completed-count">0</strong><span>已完成</span></div></div>
-            </section>
-          </div>
+          <section class="work-plan" aria-label="自动工作计划">
+            <div class="work-plan-heading"><div><p class="eyebrow">自动整理</p><h2>今天的工作计划</h2></div><div class="work-plan-actions"><span class="list-count" id="work-plan-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i>手动更新</button></div></div>
+            <div class="work-plan-summary" id="work-plan-summary"></div>
+            <div class="work-plan-grid">
+              <section><div class="work-plan-subheading"><h3>优先推进</h3><span>基于排期、进度与更新时间</span></div><div class="work-plan-list" id="work-plan-list"></div></section>
+              <section class="agenda-column"><div class="work-plan-subheading"><h3>接下来的日程</h3><span>日历安排</span></div><div class="agenda-list" id="today-agenda"></div></section>
+            </div>
+          </section>
           <section class="panel projects-panel">
             <div class="panel-heading"><div><p class="eyebrow">工作流</p><h2>项目进度</h2></div><button class="text-button" data-go-to="projects" type="button">打开排期 <i data-lucide="arrow-up-right"></i></button></div>
             <div class="project-cards" id="project-cards"></div>
@@ -83,7 +81,7 @@
           <div class="view-intro"><div><p class="eyebrow">专注时段</p><h2>一次只做一件事</h2></div></div>
           <div class="focus-layout">
             <section class="panel timer-panel"><p class="eyebrow">当前专注</p><div class="timer-display" id="timer-display">25:00</div><p class="timer-task" id="timer-task">选择一项任务开始。</p><div class="timer-actions"><button class="primary-button" id="timer-start" type="button"><i data-lucide="play"></i>开始专注</button><button class="icon-button" id="timer-reset" type="button" aria-label="重置专注计时" title="重置专注计时"><i data-lucide="rotate-ccw"></i></button></div></section>
-            <section class="panel focus-task-panel"><div class="panel-heading"><div><p class="eyebrow">专注目标</p><h2>选择任务</h2></div></div><div class="focus-task-options" id="focus-task-options"></div></section>
+            <section class="panel focus-task-panel"><div class="panel-heading"><div><p class="eyebrow">专注目标</p><h2>选择任务</h2></div></div><div class="focus-task-options" id="focus-task-options"></div><div class="focus-pagination" id="focus-pagination"></div></section>
           </div>
         </section>
 
@@ -92,15 +90,16 @@
           <div class="dev-notice" id="dev-notice"><i data-lucide="shield-check"></i><span>仅展示聚合数据，不显示会话正文、凭证或代码内容。</span></div>
           <div class="dev-metric-grid" id="dev-metric-grid"></div>
           <div class="dev-grid">
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">Codex 使用</p><h2>Token 消耗</h2></div><span class="status-chip green">本机记录</span></div><div id="codex-token-summary" class="dev-token-summary"></div><div class="dev-bars" id="codex-token-bars"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">Codex 使用</p><h2>Token 消耗</h2></div><div class="dev-detail-controls"><select id="dev-range" aria-label="统计时间范围"><option value="24h">最近 24 小时</option><option value="7d" selected>最近 7 天</option><option value="30d">最近 30 天</option><option value="all">全部时间</option></select><span class="status-chip green">本机记录</span></div></div><div id="codex-token-summary" class="dev-token-summary"></div><div class="dev-bars" id="codex-token-bars"></div><div class="dev-breakdown"><p class="eyebrow">按模型</p><div class="dev-list compact metric-list" id="codex-models"></div></div><div class="dev-breakdown"><p class="eyebrow">最高消耗会话</p><div class="dev-list compact metric-list" id="codex-top-sessions"></div></div></section>
             <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">技能与工具</p><h2>调用偏好</h2></div></div><div class="dev-list" id="dev-skills"></div><div class="dev-list compact" id="dev-tools"></div></section>
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">GitHub 公开活动</p><h2>提交与改动</h2></div><span class="status-chip blue" id="github-state">读取中</span></div><div class="dev-github-summary" id="github-summary"></div><div class="dev-commit-list" id="github-commits"></div></section>
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">本地工作区</p><h2>最近改动</h2></div><span class="status-chip pale">当前仓库</span></div><div class="dev-github-summary" id="local-summary"></div><div class="dev-commit-list" id="local-commits"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">GitHub 公开活动</p><h2>近期公开提交</h2></div><span class="status-chip blue" id="github-state">读取中</span></div><div class="dev-github-summary" id="github-summary"></div><div class="dev-commit-list" id="github-commits"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">本地工作区</p><h2>全部本机仓库</h2></div><span class="status-chip pale" id="local-repository-count">读取中</span></div><div class="dev-github-summary" id="local-summary"></div><div class="dev-commit-list" id="local-commits"></div><div class="dev-pagination" id="local-pagination"></div></section>
           </div>
+          <section class="panel dev-analysis-panel" id="dev-analysis"></section>
         </section>
 
         <section class="view news-view" id="news-view" data-view-panel="news">
-          <header class="paper-masthead"><div class="paper-date"><span class="eyebrow">JESSBOARD DAILY</span><strong id="news-edition-date">2026 年 7 月 23 日</strong><span>第 01 版 · 人工刷新</span><span id="news-lunar">农历加载中</span></div><div class="paper-title"><p>每日咨询</p><h2>Jess日报</h2><span>AI 行业 · 全球动态 · Builder 观点</span></div><div class="paper-actions"><div class="paper-weather"><span id="news-weather">上海天气加载中</span><span>本地天气 · 每 10 分钟更新</span></div><div class="paper-controls"><div class="language-toggle" role="group" aria-label="资讯语言"><button class="filter-tab active" data-news-language="zh" type="button">中文</button><button class="filter-tab" data-news-language="en" type="button">English</button></div><button class="primary-button" id="refresh-news" type="button"><i data-lucide="refresh-cw"></i>刷新</button></div></div></header>
+          <header class="paper-masthead"><div class="paper-date"><span class="eyebrow">JESSBOARD DAILY</span><strong id="news-edition-date">2026 年 7 月 23 日</strong><span>第 01 版 · 人工刷新</span><span id="news-lunar">农历加载中</span></div><div class="paper-title"><p>每日咨询</p><h2>Jess日报</h2><span>AI 行业 · 全球动态 · Builder 观点</span></div><div class="paper-actions"><div class="paper-weather"><span id="news-weather">上海天气加载中</span><span>本地天气 · 每 10 分钟更新</span></div><div class="paper-controls"><button class="primary-button" id="refresh-news" type="button"><i data-lucide="refresh-cw"></i>刷新</button></div></div></header>
           <div class="news-toolbar"><div class="news-controls"><div class="filter-tabs" role="tablist" aria-label="资讯分类"><button class="filter-tab active" data-news-filter="all" type="button">全部</button><button class="filter-tab" data-news-filter="ai" type="button">AI 与模型</button><button class="filter-tab" data-news-filter="market" type="button">市场与政策</button><button class="filter-tab" data-news-filter="product" type="button">产品与公司</button><button class="filter-tab" data-news-filter="builders" type="button">开发者生态</button><button class="filter-tab" data-news-filter="security" type="button">安全</button></div></div><div class="paper-pagination"><button class="icon-button" id="news-prev" type="button" aria-label="上一版" title="上一版"><i data-lucide="arrow-left"></i></button><span id="news-page-count">第 1 / 1 版</span><button class="icon-button" id="news-next" type="button" aria-label="下一版" title="下一版"><i data-lucide="arrow-right"></i></button></div><span class="list-count" id="news-updated">尚未刷新</span></div>
           <div class="news-layout"><main class="newspaper-page" id="news-list"></main></div>
           <footer class="news-footer"><section class="news-source-strip"><div><p class="eyebrow">本期来源</p><p class="muted-copy">所有来源合并后按市场、主题、时效和重要度编辑；来源名称和原文链接始终保留。</p></div><div class="provider-list" id="provider-list"></div></section><p class="news-editor-note">编辑规则：头条依据可靠度、时效、影响范围和信息密度排序；每篇新闻显示对应市场、主题和重要度。默认中文，可切换英文原文。</p></footer>
@@ -119,6 +118,7 @@
     </dialog>
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="work-plan.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

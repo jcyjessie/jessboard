@@ -1,0 +1,19 @@
+{
+  "feishuProject": {
+    "sourceDirectory": "../workteam-morning-report",
+    "taskTypeKey": "story",
+    "taskPageSize": 50,
+    "scheduleItemLimit": 50
+  },
+  "lark": {
+    "calendarDays": 7,
+    "documentLimit": 100,
+    "messageDays": 7,
+    "messageLimit": 100,
+    "actionability": {
+      "personalKeywords": ["曹逸婕", "Jessie", "@Jessie"],
+      "businessKeywords": ["实时&EOD", "实时和EOD", "实时", "EOD", "end of day", "real-time", "realtime", "行情", "市场数据", "图表", "K线", "K线图", "kline", "candlestick", "OHLC", "ticker", "报价", "NAV", "PnL", "shadow NAV", "基金净值", "Open API", "fund", "基金", "portfolio", "投资组合", "资产组合", "ta", "技术分析", "capital movement", "capital movements", "资金流动", "资金变动", "资金划转", "report", "报告", "multiple portfolio report", "多组合报告", "多投资组合报告", "live risk", "实时风险", "risk table", "风险表", "风险表格", "risk indicator", "风险指标", "monitor", "monitoring", "监控", "监测", "table view", "表格视图", "表视图", "graph view", "图表视图", "图形视图", "time series data", "时间序列数据", "时序数据", "mobile version", "移动端", "移动版", "home page", "homepage", "首页", "widget", "小组件", "组件", "auto ta", "自动技术分析"],
+      "actionKeywords": ["待办", "todo", "action item", "跟进", "处理", "确认", "补充", "完成", "评审", "查看", "回复", "安排", "测试", "发布", "更新", "负责", "review", "follow up", "confirm", "deliver", "prepare"]
+    }
+  }
+}
