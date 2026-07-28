@@ -14,7 +14,6 @@ const newsPageSize = 7;
 let taskFilter = "all";
 let devMetrics = null;
 let devMetricsLoading = false;
-let devRefreshTimer = null;
 let devRange = localStorage.getItem("jessboard-dev-range") || "7d";
 let localCommitPage = 0;
 const localCommitPageSize = 5;
@@ -53,6 +52,49 @@ function priorityColor(priority) { return { high: "#cc680a", medium: "#6e8175", 
 
 // Remove long links and excess detail from task titles while preserving the source record link.
 function taskDisplayTitle(task) { const text = String(task.title || "Untitled task").replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim(); return text.length > 58 ? `${text.slice(0, 58)}…` : text; }
+
+// Group synchronized Project items by the concrete business theme in their safe task metadata.
+function clusterProjectTasks(tasks) {
+  const themes = [
+    { name: "风险与可靠性", color: "#cc680a", pattern: /风控|sentry|告警|\bvar\b|rpc|influx|position-to-oi|价格偏离|debank/i },
+    { name: "账本与对账", color: "#5d7f83", pattern: /ledger|对账|recon|parser|充提|currency|entryreclassifier|历史数据回溯|eth2/i },
+    { name: "交易所与资产接入", color: "#405740", pattern: /bitmex|bitget|bitmart|kraken|okx|binance|币安|apex|tiger|xstocks|gate|cecapital|pnl|pyth|zama|alpha|合约|资产|股票/i },
+    { name: "平台与工作流", color: "#6e8175", pattern: /工具|openapi|formula|table view|hermes|投组|编辑和删除|委托/i }
+  ];
+  const groups = new Map(themes.map((theme) => [theme.name, { ...theme, tasks: [] }]));
+  for (const task of tasks || []) {
+    const text = `${task.title || ""} ${task.project || ""} ${task.nextStep || ""}`;
+    const theme = themes.find((item) => item.pattern.test(text)) || themes[3];
+    groups.get(theme.name).tasks.push(task);
+  }
+  return [...groups.values()].filter((group) => group.tasks.length).map((group) => {
+    const completed = group.tasks.filter((task) => task.status === "done" || Number(task.progress) >= 100).length;
+    const progress = Math.round(group.tasks.reduce((sum, task) => sum + Number(task.progress || 0), 0) / group.tasks.length);
+    const preview = [...group.tasks].sort((left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0))[0];
+    return { ...group, completed, active: group.tasks.length - completed, progress, preview };
+  }).sort((left, right) => right.active - left.active || right.progress - left.progress);
+}
+
+// Translate known workflow names into readable labels for the development analysis.
+function workflowLabel(name) { return { "jessiecao-cam-test-runner": "CAM 测试与验收", "jessiecao-product-test-case-writer": "测试用例设计", "jessiecao-technical-solution-writer": "技术方案梳理", "jessiecao-requirement-consistency-reviewer": "需求一致性核对", "jessiecao-pm-intake": "需求资料收集" }[name] || name || "未识别流程"; }
+
+// Derive a practical work summary and suggestion from privacy-safe session and commit aggregates.
+function buildDevelopmentInsights(codex, localGit, github) {
+  const sessions = Number(codex.sessionCount || 0);
+  const totalTokens = Number(codex.tokenUsage?.total_tokens || 0);
+  const largestSession = codex.highestTokenSessions?.[0];
+  const concentration = totalTokens && largestSession ? Math.round(Number(largestSession.tokens || 0) / totalTokens * 100) : 0;
+  const repositories = Object.entries((localGit.commits || []).reduce((result, commit) => { result[commit.repo] = (result[commit.repo] || 0) + 1; return result; }, {})).sort((left, right) => right[1] - left[1]).slice(0, 3).map(([name, count]) => `${name} ${count} 次`).join("、") || "暂无本机提交";
+  const suggestions = [];
+  if (concentration >= 40) suggestions.push(`最高消耗会话占本时段约 ${concentration}%，处理同类复杂事项前先写下当前结论和下一步，再开新会话继续。`);
+  if (Number(codex.toolCalls || 0) > sessions * 20) suggestions.push("重复的数据检查和命令调用较多，适合沉淀为固定脚本，减少每次会话的手工核对。");
+  if (!suggestions.length) suggestions.push("会话与提交分布较均衡；继续按需求、方案、测试和交付拆分会话，便于追踪投入与产出。");
+  return {
+    focus: `${sessions} 个会话主要集中在${workflowLabel(codex.skills?.[0]?.name)}；${codex.models?.[0]?.name ? `${codex.models[0].name} 承担最多 Token。` : "模型信息仍在汇总。"}`,
+    delivery: `当前记录有 ${Number(localGit.commitCount || 0)} 次本机提交，覆盖 ${Number(localGit.repositoryCount || 0)} 个仓库；提交较多的是 ${repositories}。${github.state === "ready" ? "GitHub 公开活动" : "本机补充记录"}仅用于核对公开可见的提交。`,
+    suggestions
+  };
+}
 
 // Derive a consistent priority from the task deadline and recent activity.
 function taskPriority(task) { const due = new Date(task.dueAt || task.due || 0).getTime(); const now = Date.now(); if (due && due < now) return "high"; if (due && due <= now + 48 * 60 * 60 * 1000) return "high"; if (due && due <= now + 7 * 24 * 60 * 60 * 1000) return "medium"; return task.priority || "low"; }
@@ -125,11 +167,11 @@ function renderAllTasks() {
   document.querySelector("#all-task-list").innerHTML = filtered.map((task) => taskRow(task, task.source !== "lark-task" && task.source !== "feishu-project")).join("") || "<div class=\"empty-state\"><i data-lucide=\"inbox\"></i><span>这里还没有相关任务。</span></div>";
 }
 
-// Render project cards from the current local task data.
+// Render Project work as business themes rather than the broad source project name.
 function renderProjects() {
   const tasks = contextData.feishu?.tasks || [];
-  const groups = Object.values(tasks.reduce((result, task) => { const name = task.project || "Feishu Project"; (result[name] ||= []).push(task); return result; }, {}));
-  document.querySelector("#project-cards").innerHTML = groups.map((entries) => { const name = entries[0].project || "Feishu Project"; const progressValues = entries.map((task) => Number(task.progress)).filter(Number.isFinite); const progress = progressValues.length ? Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length) : 0; const active = entries.filter((task) => task.status !== "done").length; return `<article class="project-card" style="--project-color:#405740"><div class="project-card-top"><span class="status-chip pale">飞书 Project</span><span class="project-percent">${progress}%</span></div><h3>${escapeHtml(name)}</h3><p>${active} 项进行中 · ${entries.length - active} 项已完成</p><div class="progress-line"><span style="width:${progress}%"></span></div></article>`; }).join("") || "<div class=\"empty-state\"><i data-lucide=\"folder-open\"></i><span>暂无同步的飞书 Project。</span></div>";
+  const groups = clusterProjectTasks(tasks);
+  document.querySelector("#project-cards").innerHTML = groups.map((group) => `<article class="project-card" style="--project-color:${group.color}"><div class="project-card-top"><span class="status-chip pale">飞书 Project</span><span class="project-percent">${group.progress}%</span></div><h3>${escapeHtml(group.name)}</h3><p>${group.active} 项进行中 · ${group.completed} 项已完成</p><div class="progress-line"><span style="width:${group.progress}%"></span></div><div class="project-task-preview"><span title="${escapeHtml(group.preview?.title || "")}">当前：${escapeHtml(taskDisplayTitle(group.preview || {}))}</span><span>${escapeHtml(group.preview?.nextStep || "等待下一步")}</span></div></article>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"folder-open\"></i><span>暂无同步的飞书 Project。</span></div>";
 }
 
 // Render the compact weekly focus chart.
@@ -157,7 +199,7 @@ function renderFocusOptions() {
   const pages = Math.max(1, Math.ceil(active.length / focusPageSize));
   focusPage = Math.min(focusPage, pages - 1);
   const pageTasks = active.slice(focusPage * focusPageSize, (focusPage + 1) * focusPageSize);
-  document.querySelector("#focus-task-options").innerHTML = pageTasks.map((task) => `<button class="focus-choice ${task.id === data.selectedTaskId ? "active" : ""}" data-focus-task="${escapeHtml(task.id)}" type="button" title="${escapeHtml(task.title)}"><span class="priority-dot" style="--task-color:${priorityColor(task.priority)}"></span><span>${escapeHtml(task.displayTitle)}<small>${escapeHtml(task.project || "未归类")}</small></span></button>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"check-circle-2\"></i><span>先创建一项未完成任务。</span></div>";
+  document.querySelector("#focus-task-options").innerHTML = pageTasks.map((task) => `<button class="focus-choice ${task.id === data.selectedTaskId ? "active" : ""}" data-focus-task="${escapeHtml(task.id)}" type="button" title="${escapeHtml(task.title)}"><span class="priority-dot" style="--task-color:${priorityColor(task.priority)}"></span><span><strong>${escapeHtml(task.displayTitle)}</strong><small>${escapeHtml(task.project || "未归类")}</small></span></button>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"check-circle-2\"></i><span>先创建一项未完成任务。</span></div>";
   document.querySelector("#focus-pagination").innerHTML = pages > 1 ? `<button class="icon-button" data-focus-page="${focusPage - 1}" ${focusPage === 0 ? "disabled" : ""} type="button" aria-label="上一页" title="上一页"><i data-lucide="arrow-left"></i></button><span>${focusPage + 1} / ${pages}</span><button class="icon-button" data-focus-page="${focusPage + 1}" ${focusPage === pages - 1 ? "disabled" : ""} type="button" aria-label="下一页" title="下一页"><i data-lucide="arrow-right"></i></button>` : "";
   const selected = visibleTasks().find((task) => task.id === data.selectedTaskId);
   document.querySelector("#timer-task").textContent = selected ? selected.title : "选择一项任务开始。";
@@ -298,7 +340,7 @@ async function refreshContext() {
   contextRefreshLoading = true;
   const button = document.querySelector("#refresh-context");
   button.disabled = true;
-  button.innerHTML = "<i data-lucide=\"loader-circle\" class=\"spin\"></i>更新中";
+  button.innerHTML = "<i data-lucide=\"loader-circle\" class=\"spin\"></i>刷新中";
   lucide.createIcons();
   try {
     const response = await fetch("/api/context/refresh", { method: "POST" });
@@ -311,7 +353,7 @@ async function refreshContext() {
   } finally {
     contextRefreshLoading = false;
     button.disabled = false;
-    button.innerHTML = "<i data-lucide=\"refresh-cw\"></i>手动更新";
+    button.innerHTML = "<i data-lucide=\"refresh-cw\"></i>手动刷新";
     lucide.createIcons();
   }
 }
@@ -325,10 +367,20 @@ function renderDevList(target, entries, emptyLabel) {
   element.innerHTML = entries?.length ? entries.map((entry) => `<div class="dev-list-row"><span title="${escapeHtml(entry.name)}">${escapeHtml(entry.name)}</span><strong>${compactNumber(entry.count)}</strong></div>`).join("") : `<span class="dev-empty">${escapeHtml(emptyLabel)}</span>`;
 }
 
-// Render recent commit rows from a public or local source.
+// Render a token breakdown with comparable shares and session counts.
+function renderTokenShareList(target, entries, emptyLabel) {
+  const element = document.querySelector(target);
+  const total = (entries || []).reduce((sum, entry) => sum + Number(entry.tokens || 0), 0);
+  element.innerHTML = entries?.length ? entries.map((entry) => {
+    const share = total ? Math.round(Number(entry.tokens || 0) / total * 100) : 0;
+    return `<div class="dev-list-row"><span title="${escapeHtml(entry.name)}">${escapeHtml(entry.name)}</span><strong>${compactNumber(entry.tokens)} · ${share}% · ${entry.count} 会话</strong></div>`;
+  }).join("") : `<span class="dev-empty">${escapeHtml(emptyLabel)}</span>`;
+}
+
+// Render recent commit rows with their source, hash, and author timestamp.
 function renderDevCommits(target, commits, emptyLabel) {
   const element = document.querySelector(target);
-  element.innerHTML = commits?.length ? commits.map((commit) => `<article class="dev-commit"><div><strong>${escapeHtml(commit.message || "未命名提交")}</strong><span>${escapeHtml(commit.repo || commit.date || "本地仓库")} ${commit.sha ? `· ${escapeHtml(commit.sha.slice(0, 7))}` : ""}</span></div><em>${commit.additions != null ? `+${compactNumber(commit.additions)} / -${compactNumber(commit.deletions)}` : "已记录"}</em></article>`).join("") : `<span class="dev-empty">${escapeHtml(emptyLabel)}</span>`;
+  element.innerHTML = commits?.length ? commits.map((commit) => { const meta = [commit.repo || "本地仓库", commit.sha ? commit.sha.slice(0, 7) : "", commit.date ? formatDate(commit.date, true) : ""].filter(Boolean).join(" · "); return `<article class="dev-commit"><div><strong title="${escapeHtml(commit.message || "未命名提交")}">${escapeHtml(commit.message || "未命名提交")}</strong><span>${escapeHtml(meta)}</span></div><em>${commit.additions != null ? `+${compactNumber(commit.additions)} / -${compactNumber(commit.deletions)}` : "已记录"}</em></article>`; }).join("") : `<span class="dev-empty">${escapeHtml(emptyLabel)}</span>`;
 }
 
 // Render a compact page of local commits so the workspaces panel stays scannable.
@@ -360,10 +412,12 @@ function renderDevMetrics() {
   const tokenBars = [["输入 Token", tokens.input_tokens], ["缓存输入", tokens.cached_input_tokens], ["输出 Token", tokens.output_tokens], ["推理输出", tokens.reasoning_output_tokens]];
   const maxToken = Math.max(...tokenBars.map(([, value]) => Number(value) || 0), 1);
   document.querySelector("#codex-token-bars").innerHTML = tokenBars.map(([label, value]) => `<div class="dev-bar-row"><span>${label}</span><div class="dev-bar-track"><span style="width:${Math.max(2, Math.round((Number(value) || 0) / maxToken * 100))}%"></span></div><strong>${compactNumber(value)}</strong></div>`).join("");
-  document.querySelector("#codex-models").innerHTML = codex.models?.length ? codex.models.map((model) => `<div class="dev-list-row"><span title="${escapeHtml(model.name)}">${escapeHtml(model.name === "Unknown" ? "Legacy session (model not recorded)" : model.name)}</span><strong>${compactNumber(model.tokens)} · ${model.count}</strong></div>`).join("") : "<span class=\"dev-empty\">No model records</span>";
+  const models = (codex.models || []).map((model) => ({ ...model, name: model.name === "Unknown" ? "Legacy session (model not recorded)" : model.name }));
+  renderTokenShareList("#codex-models", models, "尚未识别到模型记录");
+  renderTokenShareList("#codex-scenarios", codex.scenarios, "尚未识别到使用场景");
   document.querySelector("#codex-top-sessions").innerHTML = codex.highestTokenSessions?.length ? codex.highestTokenSessions.map((session) => `<div class="dev-list-row"><a href="codex://thread/${escapeHtml(session.id)}" title="${escapeHtml(session.id)}">${escapeHtml(session.title)}<small>${escapeHtml(session.id)}</small></a><strong>${compactNumber(session.tokens)}</strong></div>`).join("") : "<span class=\"dev-empty\">No token records</span>";
-  const leadingModel = codex.models?.[0]?.name === "Unknown" ? "legacy sessions without model metadata" : codex.models?.[0]?.name;
-  document.querySelector("#dev-analysis").innerHTML = `<p class="eyebrow">Development summary</p><h2>Work pattern</h2><p>${compactNumber(codex.sessionCount)} sessions in the selected range. ${leadingModel ? `${escapeHtml(leadingModel)} has the highest recorded token use.` : "Model details are still loading."} ${codex.skills?.[0] ? `Most-used workflow: ${escapeHtml(codex.skills[0].name)}.` : ""}</p>`;
+  const insights = buildDevelopmentInsights(codex, local, github);
+  document.querySelector("#dev-analysis").innerHTML = `<p class="eyebrow">Development insight</p><h2>本周工作画像</h2><div class="dev-analysis-grid"><article><h3>工作重心</h3><p>${escapeHtml(insights.focus)}</p></article><article><h3>交付节奏</h3><p>${escapeHtml(insights.delivery)}</p></article><article><h3>建议</h3>${insights.suggestions.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</article></div>`;
   renderDevList("#dev-skills", codex.skills, "尚未识别到 skill 调用");
   renderDevList("#dev-tools", codex.tools, "尚未识别到工具调用");
   document.querySelector("#github-state").textContent = github.state === "fallback" ? "本机补充" : github.state === "ready" ? `@${github.username}` : "不可用";
@@ -383,7 +437,7 @@ async function loadDevMetrics() {
   devMetricsLoading = true;
   const button = document.querySelector("#refresh-dev-metrics");
   button.disabled = true;
-  button.innerHTML = "<i data-lucide=\"loader-circle\" class=\"spin\"></i>统计中";
+  button.innerHTML = "<i data-lucide=\"loader-circle\" class=\"spin\"></i>刷新中";
   lucide.createIcons();
   try {
     const response = await fetch(`/api/dev-metrics?range=${encodeURIComponent(devRange)}`);
@@ -396,24 +450,9 @@ async function loadDevMetrics() {
   } finally {
     devMetricsLoading = false;
     button.disabled = false;
-    button.innerHTML = "<i data-lucide=\"refresh-cw\"></i>刷新统计";
+    button.innerHTML = "<i data-lucide=\"refresh-cw\"></i>手动刷新";
     lucide.createIcons();
   }
-}
-
-// Schedule the next weekday development refresh without tying it to tab navigation.
-function scheduleDevelopmentRefresh() {
-  if (devRefreshTimer) clearTimeout(devRefreshTimer);
-  const now = new Date();
-  const next = new Date(now);
-  next.setMinutes(0, 0, 0);
-  next.setHours(next.getHours() + 1);
-  devRefreshTimer = window.setTimeout(() => {
-    const refreshTime = new Date();
-    const weekday = refreshTime.getDay() >= 1 && refreshTime.getDay() <= 5;
-    if (weekday && refreshTime.getHours() >= 10 && refreshTime.getHours() <= 20) loadDevMetrics();
-    scheduleDevelopmentRefresh();
-  }, Math.max(1000, next.getTime() - now.getTime()));
 }
 
 // Fetch all three news providers through the local service.
@@ -488,6 +527,24 @@ function toggleTimer() {
 // Populate the project choice field from the active local project list.
 function populateProjectMenu() { document.querySelector("#task-project").innerHTML = data.projects.length ? data.projects.map((project) => `<option value="${escapeHtml(project.name)}">${escapeHtml(project.name)}</option>`).join("") : "<option value=\"未归类\">未归类</option>"; }
 
+// Keep the sidebar control label and icon aligned with its current layout state.
+function updateSidebarToggle() {
+  const button = document.querySelector("#sidebar-toggle");
+  const collapsed = document.body.classList.contains("sidebar-collapsed");
+  const label = collapsed ? "展开侧边栏" : "收起侧边栏";
+  button.setAttribute("aria-label", label);
+  button.setAttribute("title", label);
+  button.innerHTML = `<i data-lucide="${collapsed ? "panel-left-open" : "panel-left-close"}"></i>`;
+  lucide.createIcons();
+}
+
+// Toggle the compact sidebar and retain the preference for the next visit.
+function toggleSidebar() {
+  document.body.classList.toggle("sidebar-collapsed");
+  localStorage.setItem("jessboard-sidebar", document.body.classList.contains("sidebar-collapsed") ? "collapsed" : "expanded");
+  updateSidebarToggle();
+}
+
 // Wire shared controls, filters, navigation, and dialogs.
 function bindEvents() {
   document.addEventListener("click", (event) => {
@@ -499,7 +556,7 @@ function bindEvents() {
     if (taskTab) { taskFilter = taskTab.dataset.taskFilter; document.querySelectorAll("[data-task-filter]").forEach((tab) => tab.classList.toggle("active", tab === taskTab)); renderAllTasks(); lucide.createIcons(); }
     if (newsTab) { newsFilter = newsTab.dataset.newsFilter; newsPage = 0; document.querySelectorAll("[data-news-filter]").forEach((tab) => tab.classList.toggle("active", tab === newsTab)); renderNews(); lucide.createIcons(); }
     if (languageTab) setNewsLanguage(languageTab.dataset.newsLanguage);
-    if (sidebarToggle) { document.body.classList.toggle("sidebar-collapsed"); localStorage.setItem("jessboard-sidebar", document.body.classList.contains("sidebar-collapsed") ? "collapsed" : "expanded"); }
+    if (sidebarToggle) toggleSidebar();
     if (focusPager) { focusPage = Number(focusPager.dataset.focusPage); renderFocusOptions(); lucide.createIcons(); }
     if (localPager) { localCommitPage = Number(localPager.dataset.localPage); renderDevMetrics(); lucide.createIcons(); }
   });
@@ -528,6 +585,7 @@ function renderToday() { const now = new Date(); const todayDate = document.quer
 
 if (localStorage.getItem("jessboard-theme") === "dark") document.body.classList.add("dark");
 if (localStorage.getItem("jessboard-sidebar") === "collapsed") document.body.classList.add("sidebar-collapsed");
+updateSidebarToggle();
 document.querySelector("#dev-range").value = devRange;
 populateProjectMenu();
 bindEvents();
@@ -538,4 +596,3 @@ renderNews();
 renderTimer();
 loadContext();
 loadShanghaiWeather();
-scheduleDevelopmentRefresh();

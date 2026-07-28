@@ -15,19 +15,20 @@
         <div class="sidebar-brand-row"><a class="brand" href="#dashboard" aria-label="Jessboard 总览">
           <span class="brand-mark"><i data-lucide="orbit"></i></span>
           <span>Jessboard</span>
-        </a><button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-label="收起侧边栏" title="收起侧边栏"><i data-lucide="panel-left-close"></i></button></div>
+        </a></div>
 
         <div class="workspace-label">个人工作台</div>
         <nav class="nav-list" aria-label="主导航">
-          <button class="nav-item active" data-view="dashboard" type="button" title="总览"><i data-lucide="layout-dashboard"></i><span>总览</span></button>
-          <button class="nav-item" data-view="today" type="button" title="我的任务"><i data-lucide="check-square-2"></i><span>我的任务</span></button>
-          <button class="nav-item" data-view="projects" type="button" title="项目排期"><i data-lucide="kanban-square"></i><span>项目排期</span></button>
-          <button class="nav-item" data-view="focus" type="button" title="专注"><i data-lucide="timer"></i><span>专注</span></button>
-          <button class="nav-item" data-view="dev" type="button" title="开发分析"><i data-lucide="activity"></i><span>开发分析</span></button>
-          <button class="nav-item" data-view="news" type="button" title="资讯"><i data-lucide="newspaper"></i><span>咨询</span><span class="nav-badge" id="news-nav-count">0</span></button>
+          <button class="nav-item active" data-view="dashboard" data-tooltip="总览" type="button" title="总览"><i data-lucide="layout-dashboard"></i><span>总览</span></button>
+          <button class="nav-item" data-view="today" data-tooltip="我的任务" type="button" title="我的任务"><i data-lucide="check-square-2"></i><span>我的任务</span></button>
+          <button class="nav-item" data-view="projects" data-tooltip="项目排期" type="button" title="项目排期"><i data-lucide="kanban-square"></i><span>项目排期</span></button>
+          <button class="nav-item" data-view="focus" data-tooltip="专注" type="button" title="专注"><i data-lucide="timer"></i><span>专注</span></button>
+          <button class="nav-item" data-view="dev" data-tooltip="开发分析" type="button" title="开发分析"><i data-lucide="activity"></i><span>开发分析</span></button>
+          <button class="nav-item" data-view="news" data-tooltip="资讯" type="button" title="资讯"><i data-lucide="newspaper"></i><span>资讯</span><span class="nav-badge" id="news-nav-count">0</span></button>
         </nav>
 
         <div class="sidebar-footer">
+          <button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-label="收起侧边栏" title="收起侧边栏"><i data-lucide="panel-left-close"></i></button>
           <div class="sync-note"><i data-lucide="refresh-cw"></i><span id="sync-note-text">本机数据</span></div>
           <button class="profile-button" type="button"><span class="avatar">J</span><span>Jessie 的工作台</span><i data-lucide="more-horizontal"></i></button>
         </div>
@@ -52,8 +53,8 @@
             <div><p class="eyebrow">今日工作台</p><h2>你好，Jessie <span class="wave">✦</span></h2><p class="muted-copy">把来自 Codex、飞书和灵感流的事项，收拢到一个清晰的节奏里。</p></div>
           </div>
           <div class="insight-grid" id="insight-grid"></div>
-          <section class="work-plan" aria-label="自动工作计划">
-            <div class="work-plan-heading"><div><p class="eyebrow">自动整理</p><h2>今天的工作计划</h2></div><div class="work-plan-actions"><span class="list-count" id="work-plan-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i>手动更新</button></div></div>
+          <section class="work-plan" aria-label="今日工作计划">
+            <div class="work-plan-heading"><div><p class="eyebrow">工作计划</p><h2>今天的工作计划</h2></div><div class="work-plan-actions"><span class="list-count" id="work-plan-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i>手动刷新</button></div></div>
             <div class="work-plan-summary" id="work-plan-summary"></div>
             <div class="work-plan-grid">
               <section><div class="work-plan-subheading"><h3>优先推进</h3><span>基于排期、进度与更新时间</span></div><div class="work-plan-list" id="work-plan-list"></div></section>
@@ -86,14 +87,14 @@
         </section>
 
         <section class="view dev-view" id="dev-view" data-view-panel="dev">
-          <div class="view-intro dev-intro"><div><p class="eyebrow">开发数据</p><h2>开发分析</h2><p class="muted-copy">把 Codex 使用、技能调用、GitHub 活动和本地改动放在同一张实时看板里。</p></div><div class="dev-actions"><span class="list-count" id="dev-updated">尚未同步</span><button class="primary-button" id="refresh-dev-metrics" type="button"><i data-lucide="refresh-cw"></i>刷新统计</button></div></div>
+          <div class="view-intro dev-intro"><div><p class="eyebrow">开发数据</p><h2>开发分析</h2><p class="muted-copy">把 Codex 使用、技能调用、GitHub 活动和本地改动放在同一张实时看板里。</p></div><div class="dev-actions"><span class="list-count" id="dev-updated">尚未同步</span><button class="secondary-button" id="refresh-dev-metrics" type="button"><i data-lucide="refresh-cw"></i>手动刷新</button></div></div>
           <div class="dev-notice" id="dev-notice"><i data-lucide="shield-check"></i><span>仅展示聚合数据，不显示会话正文、凭证或代码内容。</span></div>
           <div class="dev-metric-grid" id="dev-metric-grid"></div>
           <div class="dev-grid">
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">Codex 使用</p><h2>Token 消耗</h2></div><div class="dev-detail-controls"><select id="dev-range" aria-label="统计时间范围"><option value="24h">最近 24 小时</option><option value="7d" selected>最近 7 天</option><option value="30d">最近 30 天</option><option value="all">全部时间</option></select><span class="status-chip green">本机记录</span></div></div><div id="codex-token-summary" class="dev-token-summary"></div><div class="dev-bars" id="codex-token-bars"></div><div class="dev-breakdown"><p class="eyebrow">按模型</p><div class="dev-list compact metric-list" id="codex-models"></div></div><div class="dev-breakdown"><p class="eyebrow">最高消耗会话</p><div class="dev-list compact metric-list" id="codex-top-sessions"></div></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">Codex 使用</p><h2>Token 消耗</h2></div><div class="dev-detail-controls"><select id="dev-range" aria-label="统计时间范围"><option value="24h">最近 24 小时</option><option value="7d" selected>最近 7 天</option><option value="30d">最近 30 天</option><option value="all">全部时间</option></select><span class="status-chip green">本机记录</span></div></div><div id="codex-token-summary" class="dev-token-summary"></div><div class="dev-bars" id="codex-token-bars"></div><div class="dev-breakdown"><p class="eyebrow">按模型</p><div class="dev-list compact metric-list" id="codex-models"></div></div><div class="dev-breakdown"><p class="eyebrow">使用场景</p><div class="dev-list compact metric-list" id="codex-scenarios"></div></div><div class="dev-breakdown"><p class="eyebrow">最高消耗会话</p><div class="dev-list compact metric-list" id="codex-top-sessions"></div></div></section>
             <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">技能与工具</p><h2>调用偏好</h2></div></div><div class="dev-list" id="dev-skills"></div><div class="dev-list compact" id="dev-tools"></div></section>
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">GitHub 公开活动</p><h2>近期公开提交</h2></div><span class="status-chip blue" id="github-state">读取中</span></div><div class="dev-github-summary" id="github-summary"></div><div class="dev-commit-list" id="github-commits"></div></section>
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">本地工作区</p><h2>全部本机仓库</h2></div><span class="status-chip pale" id="local-repository-count">读取中</span></div><div class="dev-github-summary" id="local-summary"></div><div class="dev-commit-list" id="local-commits"></div><div class="dev-pagination" id="local-pagination"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">GitHub 公开活动</p><h2>公开记录中的提交</h2></div><span class="status-chip blue" id="github-state">读取中</span></div><p class="dev-panel-note">仅统计公开事件流可识别的提交，不代表所有本机仓库。</p><div class="dev-github-summary" id="github-summary"></div><div class="dev-commit-list" id="github-commits"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">本地工作区</p><h2>已发现的本机提交</h2></div><span class="status-chip pale" id="local-repository-count">读取中</span></div><p class="dev-panel-note">用于查看当前工作区内跨仓库的提交记录。</p><div class="dev-github-summary" id="local-summary"></div><div class="dev-commit-list" id="local-commits"></div><div class="dev-pagination" id="local-pagination"></div></section>
           </div>
           <section class="panel dev-analysis-panel" id="dev-analysis"></section>
         </section>
@@ -119,6 +120,6 @@
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script src="work-plan.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260727-01"></script>
   </body>
 </html>

@@ -257,7 +257,7 @@ async function serveStatic(requestPath, response) {
     const content = await fs.readFile(target);
     const ext = path.extname(target).toLowerCase();
     const types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8" };
-    response.writeHead(200, { "content-type": types[ext] || "application/octet-stream" }); response.end(content);
+    response.writeHead(200, { "content-type": types[ext] || "application/octet-stream", "cache-control": "no-store" }); response.end(content);
   } catch { sendJson(response, 404, { error: "Not found" }); }
 }
 

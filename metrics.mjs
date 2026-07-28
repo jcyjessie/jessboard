@@ -88,6 +88,33 @@ function sumTokenUsage(sessions) {
   }, {});
 }
 
+// Classify one session from its recorded skill activity without reading conversation content.
+function classifySessionScenario(session) {
+  const skills = Object.entries(session.skills || {});
+  const scenarios = [
+    ["测试与验收", /test|runner|case-generator/i],
+    ["产品规划", /prd|pm-intake|technical-solution|consistency|demo-builder/i],
+    ["界面与浏览", /browser|computer-use|control-chrome/i],
+    ["Skill 建设", /skill-creator|skill-refine/i]
+  ];
+  const matches = scenarios.map(([name, pattern]) => ({ name, score: skills.reduce((sum, [skill, count]) => sum + (pattern.test(skill) ? Number(count) : 0), 0) }));
+  const primary = matches.sort((left, right) => right.score - left.score)[0];
+  return primary?.score ? primary.name : "其他工作";
+}
+
+// Sum session token totals by their strongest recorded work scenario.
+function summarizeTokenScenarios(sessions) {
+  const groups = new Map();
+  for (const session of sessions) {
+    const name = classifySessionScenario(session);
+    const current = groups.get(name) || { name, count: 0, tokens: 0 };
+    current.count += 1;
+    current.tokens += Number(session.tokenUsage?.total_tokens || 0);
+    groups.set(name, current);
+  }
+  return [...groups.values()].sort((left, right) => right.tokens - left.tokens);
+}
+
 // Return privacy-safe summaries for every local Codex session, ordered by recent activity.
 export async function loadCodexSessionSummaries() {
   const files = [...await listSessionFiles(path.join(codexRoot, "sessions")), ...await listSessionFiles(path.join(codexRoot, "archived_sessions"))];
@@ -110,7 +137,7 @@ async function loadGithubMetrics(username) {
     counts[event.type] = (counts[event.type] || 0) + 1;
     if (event.type === "PushEvent") {
       pushEvents.push(event);
-      for (const commit of event.payload?.commits || []) commits.push({ repo: event.repo?.name, sha: commit.sha, message: commit.message });
+      for (const commit of event.payload?.commits || []) commits.push({ repo: event.repo?.name, sha: commit.sha, message: commit.message, date: event.created_at });
     }
   }
   // Public user events omit commit arrays, so resolve recent push ranges through GitHub Compare.
@@ -121,7 +148,7 @@ async function loadGithubMetrics(username) {
     const compareResponse = await fetch(`https://api.github.com/repos/${event.repo.name}/compare/${before}...${head}`, { headers });
     if (!compareResponse.ok) return [];
     const compare = await compareResponse.json();
-    return (compare.commits || []).map((commit) => ({ repo: event.repo.name, sha: commit.sha, message: commit.commit?.message || "未命名提交" }));
+    return (compare.commits || []).map((commit) => ({ repo: event.repo.name, sha: commit.sha, message: commit.commit?.message || "未命名提交", date: commit.commit?.author?.date || event.created_at }));
   }));
   compareResults.forEach((result) => { if (result.status === "fulfilled") commits.push(...result.value); });
   const uniqueCommits = [...new Map(commits.filter((entry) => entry.repo && entry.sha).map((entry) => [`${entry.repo}:${entry.sha}`, entry])).values()].slice(0, 24);
@@ -129,7 +156,7 @@ async function loadGithubMetrics(username) {
     const detailResponse = await fetch(`https://api.github.com/repos/${commit.repo}/commits/${commit.sha}`, { headers });
     if (!detailResponse.ok) return null;
     const detail = await detailResponse.json();
-    return { repo: commit.repo, sha: commit.sha, message: commit.message, additions: Number(detail.stats?.additions || 0), deletions: Number(detail.stats?.deletions || 0), files: Array.isArray(detail.files) ? detail.files.length : 0, url: detail.html_url };
+    return { repo: commit.repo, sha: commit.sha, message: commit.message, date: detail.commit?.author?.date || commit.date, additions: Number(detail.stats?.additions || 0), deletions: Number(detail.stats?.deletions || 0), files: Array.isArray(detail.files) ? detail.files.length : 0, url: detail.html_url };
   }));
   const commitStats = details.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
   return { state: "ready", username, fetchedAt: new Date().toISOString(), eventCount: events.length, eventTypes: counts, commitCount: uniqueCommits.length, additions: commitStats.reduce((sum, entry) => sum + entry.additions, 0), deletions: commitStats.reduce((sum, entry) => sum + entry.deletions, 0), files: commitStats.reduce((sum, entry) => sum + entry.files, 0), commits: commitStats.slice(0, 8) };
@@ -145,7 +172,7 @@ async function loadLocalGitMetrics(username) {
   const records = await Promise.all(folders.map(async (directory) => {
     try { await fs.access(path.join(directory, ".git")); } catch { return null; }
     const identity = (await runGit(directory, ["config", "user.email"])).trim() || (await runGit(directory, ["config", "user.name"])).trim() || username;
-    const log = await runGit(directory, ["log", "--all", "-30", "--author", identity, "--numstat", "--format=commit%x09%h%x09%ad%x09%s", "--date=short"]);
+    const log = await runGit(directory, ["log", "--all", "-30", "--author", identity, "--numstat", "--format=commit%x09%h%x09%aI%x09%s"]);
     const commits = log.split("\n").filter((line) => line.startsWith("commit\t")).map((line) => { const [, sha, date, message] = line.split("\t"); return { repo: path.basename(directory), sha, date, message }; });
     return { commits, history: parseLines(log) };
   }));
@@ -182,6 +209,7 @@ export async function loadDevelopmentMetrics(range = "all") {
     for (const [name, count] of Object.entries(session.skills)) skills[name] = (skills[name] || 0) + count;
     for (const [name, count] of Object.entries(session.toolNames)) tools[name] = (tools[name] || 0) + count;
   }
+  const scopedTokenUsage = sumTokenUsage(scopedSessions);
   const models = Object.entries(scopedSessions.reduce((result, session) => {
     const model = session.model || "Unknown";
     const current = result[model] || { count: 0, tokens: 0 };
@@ -190,13 +218,14 @@ export async function loadDevelopmentMetrics(range = "all") {
     result[model] = current;
     return result;
   }, {})).map(([name, value]) => ({ name, ...value })).sort((left, right) => right.tokens - left.tokens);
+  const scenarios = summarizeTokenScenarios(scopedSessions);
   const highestTokenSessions = scopedSessions.map((session) => ({ id: session.id, title: session.title || "Untitled conversation", workspace: path.basename(session.cwd || "") || "Unknown workspace", model: session.model || "Unknown", updatedAt: session.updatedAt, tokens: Number(session.tokenUsage?.total_tokens || 0) })).filter((session) => session.tokens > 0).sort((left, right) => right.tokens - left.tokens).slice(0, 5);
   const [githubResult, local] = await Promise.allSettled([loadGithubMetrics(username), loadLocalGitMetrics(username)]);
   const localGit = local.status === "fulfilled" ? local.value : { repository: projectRoot, repositoryCount: 0, workingTree: { additions: 0, deletions: 0, files: 0 }, commitCount: 0, commits: [], history: { additions: 0, deletions: 0, files: 0 } };
   const github = githubResult.status === "fulfilled" ? githubResult.value : { state: "fallback", username, detail: "GitHub public API rate-limited; showing local repository history.", commitCount: localGit.commitCount, additions: localGit.history.additions, deletions: localGit.history.deletions, commits: localGit.commits };
   const weekSessions = sessions.filter((session) => now - new Date(session.updatedAt || session.startedAt || 0).getTime() < 7 * 24 * 60 * 60 * 1000);
   const overview = { allTokens: sumTokenUsage(sessions).total_tokens, weekTokens: sumTokenUsage(weekSessions).total_tokens, allSessions: sessions.length, activeSessions: sessions.filter((session) => session.status === "active").length };
-  const data = { fetchedAt: new Date().toISOString(), range, overview, codex: { state: "ready", source: "本机 Codex 会话记录", sessionCount: scopedSessions.length, activeSessionCount: scopedSessions.filter((session) => session.status === "active").length, turns, toolCalls, tokenUsage: sumTokenUsage(scopedSessions), daily, models, highestTokenSessions, skills: Object.entries(skills).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), tools: Object.entries(tools).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), quota: { state: "unavailable", detail: "Codex CLI 本地记录不包含账户额度或账单数据" } }, github, localGit };
+  const data = { fetchedAt: new Date().toISOString(), range, overview, codex: { state: "ready", source: "本机 Codex 会话记录", sessionCount: scopedSessions.length, activeSessionCount: scopedSessions.filter((session) => session.status === "active").length, turns, toolCalls, tokenUsage: scopedTokenUsage, daily, models, scenarios, highestTokenSessions, skills: Object.entries(skills).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), tools: Object.entries(tools).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), quota: { state: "unavailable", detail: "Codex CLI 本地记录不包含账户额度或账单数据" } }, github, localGit };
   metricsCache.set(range, { data, expiresAt: Date.now() + 30 * 1000 });
   return data;
 }
