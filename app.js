@@ -22,6 +22,8 @@ let timerSeconds = 25 * 60;
 let timerId = null;
 let focusPage = 0;
 const focusPageSize = 8;
+const dismissedBriefMessagesKey = "jessboard-dismissed-brief-messages-v1";
+let dismissedBriefMessages = loadDismissedBriefMessages();
 
 // Remove the previous demo board once, then keep future local edits intact.
 function loadData() {
@@ -43,6 +45,15 @@ function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
 // Save task changes locally after every action.
 function saveData() { localStorage.setItem(storageKey, JSON.stringify(data)); }
+
+// Load locally dismissed message prompts without changing the Feishu source.
+function loadDismissedBriefMessages() {
+  try { return new Set(JSON.parse(localStorage.getItem(dismissedBriefMessagesKey)) || []); }
+  catch (error) { console.warn("无法读取已忽略的消息提示，已使用空白记录。", error); return new Set(); }
+}
+
+// Persist dismissed message prompts for this browser only.
+function saveDismissedBriefMessages() { localStorage.setItem(dismissedBriefMessagesKey, JSON.stringify([...dismissedBriefMessages])); }
 
 // Escape untrusted text before placing it into generated markup.
 function escapeHtml(value = "") { const element = document.createElement("div"); element.textContent = value; return element.innerHTML; }
@@ -147,6 +158,47 @@ function renderInsights() {
   document.querySelector("#insight-grid").innerHTML = metrics.map(([color, value, detail, label]) => `<article class="metric-card" style="--metric-color:${color}"><p class="eyebrow">${label}</p><strong>${value}</strong><span>${detail}</span></article>`).join("");
 }
 
+// Render one daily priority or risk item with its reason and next action.
+function dailyBriefTaskItem(task, annotation = null) {
+  const isUrgent = task.score <= 15;
+  const link = task.link ? `<a class="brief-open" href="${escapeHtml(task.link)}" target="_blank" rel="noreferrer" aria-label="在飞书中打开：${escapeHtml(task.title)}" title="在飞书中打开"><i data-lucide="arrow-up-right"></i></a>` : "";
+  const annotationClass = annotation ? ` ann ann-s ann-${annotation.color} ann-no-mark` : "";
+  const annotationNote = annotation ? ` data-note="${escapeHtml(annotation.note)}"` : "";
+  return `<article class="brief-item ${annotation ? "has-annotation" : ""}"><div><span class="brief-state ${isUrgent ? "urgent" : ""}${annotationClass}"${annotationNote}>${escapeHtml(isUrgent ? "优先处理" : task.state.label)}</span><h4 title="${escapeHtml(task.title)}">${escapeHtml(taskDisplayTitle(task))}</h4><p>${escapeHtml(task.action)}</p></div><div class="brief-item-meta"><time>${escapeHtml(task.due ? formatDate(task.due, true) : "暂无截止")}</time><span>${escapeHtml(task.reason)}</span>${link}</div></article>`;
+}
+
+// Render an upcoming meeting with its preparation prompt and related work.
+function dailyBriefMeetingItem(item) {
+  const related = item.relatedTask ? ` · 关联：${taskDisplayTitle(item.relatedTask)}` : "";
+  const link = item.link ? `<a class="brief-open" href="${escapeHtml(item.link)}" target="_blank" rel="noreferrer" aria-label="在飞书中打开日程：${escapeHtml(item.title)}" title="在飞书中打开"><i data-lucide="arrow-up-right"></i></a>` : "";
+  return `<article class="brief-item"><div><span class="brief-state">需准备</span><h4 title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4><p>${escapeHtml(item.preparation)}</p><span class="meeting-context">${escapeHtml(related)}</span></div><div class="brief-item-meta"><time>${escapeHtml(formatDate(item.start, true))}</time>${link}</div></article>`;
+}
+
+// Render one message that requires a human decision before it becomes a task.
+function dailyBriefReplyItem(message) {
+  return `<article class="reply-item"><div class="reply-item-head"><div><span class="brief-state">${escapeHtml(message.reason)}</span><h4 title="${escapeHtml(message.chat)}">${escapeHtml(message.chat || "飞书消息")}</h4></div><span>${escapeHtml(message.sender || "未知发送人")}</span></div><p>${escapeHtml(message.preview)}</p><div class="reply-actions"><a class="reply-action" href="${escapeHtml(message.link || "#")}" ${message.link ? "target=\"_blank\" rel=\"noreferrer\"" : ""}>查看消息</a><button class="reply-action" data-add-message-task="${escapeHtml(message.id)}" type="button">加入任务</button><button class="reply-action dismiss" data-dismiss-message="${escapeHtml(message.id)}" type="button">忽略</button></div></article>`;
+}
+
+// Render the action-led daily brief from the current read-only context snapshot.
+function renderDailyBrief() {
+  if (!window.DailyBrief) return;
+  const brief = window.DailyBrief.build(contextData, { ignoredMessageIds: [...dismissedBriefMessages] });
+  const updated = document.querySelector("#daily-brief-updated");
+  updated.textContent = brief.generatedAt ? `更新于 ${formatDate(brief.generatedAt, true)}` : "等待同步";
+  const isQuiet = !brief.priorities.length && !brief.meetings.length && !brief.reply.length && !brief.risks.length;
+  document.querySelector(".daily-brief").classList.toggle("is-quiet", isQuiet);
+  const summary = [[brief.summary.priorities, "项优先推进"], [brief.summary.meetings, "个今日会议"], [brief.summary.reply, "条待确认消息"], [brief.summary.waiting, "项外部依赖"]];
+  document.querySelector("#daily-brief-summary").innerHTML = isQuiet ? "<div class=\"brief-calm-summary\"><i data-lucide=\"circle-check-big\"></i><span>今天没有需要立即处理的事项</span></div>" : summary.map(([value, label]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join("");
+  const syncCue = !brief.generatedAt ? "<p class=\"brief-empty sync-guidance\"><span class=\"ann ann-s ann-blue\" data-note=\"先同步工作上下文\">等待同步</span><br />同步后会在这里显示今日优先事项。</p>" : "<p class=\"brief-empty\">今天没有需要推进的工作。</p>";
+  document.querySelector("#daily-priority-list").innerHTML = brief.priorities.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "amber", note: "从这里开始" } : null)).join("") || syncCue;
+  document.querySelector("#daily-meeting-list").innerHTML = brief.meetings.map(dailyBriefMeetingItem).join("") || "<p class=\"brief-empty\">未来 48 小时没有需要准备的会议。</p>";
+  document.querySelector("#daily-reply-list").innerHTML = brief.reply.map(dailyBriefReplyItem).join("") || "<p class=\"brief-empty\">没有需要人工确认的消息。</p>";
+  document.querySelector("#daily-risk-list").innerHTML = brief.risks.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "red", note: "先确认依赖" } : null)).join("") || "<p class=\"brief-empty\">当前没有明显的截止或依赖风险。</p>";
+  const closed = brief.closed.length ? brief.closed.map((task) => `<div><i data-lucide="check-circle-2"></i><span>${escapeHtml(taskDisplayTitle(task))}</span></div>`).join("") : "<div><i data-lucide=\"circle\"></i><span>完成事项会在下次同步后显示在这里。</span></div>";
+  const followUp = brief.risks[0] ? `<div><i class="risk-icon" data-lucide="triangle-alert"></i><span>下一项风险：${escapeHtml(taskDisplayTitle(brief.risks[0]))}</span></div>` : `<div><i data-lucide="calendar-arrow-right"></i><span>明日已有 ${brief.tomorrowCount} 项任务或日程需要关注。</span></div>`;
+  document.querySelector("#daily-closeout").innerHTML = `<div class="daily-closeout-heading"><div><p class="eyebrow">日终闭环</p><h3>完成、未完成原因与明日关注</h3><p>系统只呈现同步到飞书的结果，不会自行判断任务是否完成。</p></div></div><div class="closeout-list">${closed}${followUp}</div>`;
+}
+
 // Render the short priority list on the overview page.
 function renderPriorities() {
   const target = document.querySelector("#priority-list");
@@ -199,7 +251,7 @@ function renderFocusOptions() {
   const pages = Math.max(1, Math.ceil(active.length / focusPageSize));
   focusPage = Math.min(focusPage, pages - 1);
   const pageTasks = active.slice(focusPage * focusPageSize, (focusPage + 1) * focusPageSize);
-  document.querySelector("#focus-task-options").innerHTML = pageTasks.map((task) => `<button class="focus-choice ${task.id === data.selectedTaskId ? "active" : ""}" data-focus-task="${escapeHtml(task.id)}" type="button" title="${escapeHtml(task.title)}"><span class="priority-dot" style="--task-color:${priorityColor(task.priority)}"></span><span><strong>${escapeHtml(task.displayTitle)}</strong><small>${escapeHtml(task.project || "未归类")}</small></span></button>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"check-circle-2\"></i><span>先创建一项未完成任务。</span></div>";
+  document.querySelector("#focus-task-options").innerHTML = pageTasks.map((task) => `<button class="focus-choice ${task.id === data.selectedTaskId ? "active" : ""}" data-focus-task="${escapeHtml(task.id)}" type="button" title="${escapeHtml(task.title)}"><span class="priority-dot" style="--task-color:${priorityColor(task.priority)}"></span><span><strong class="${task.id === data.selectedTaskId ? "ann ann-green" : ""}">${escapeHtml(task.displayTitle)}</strong><small>${escapeHtml(task.project || "未归类")}</small></span></button>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"check-circle-2\"></i><span>先创建一项未完成任务。</span></div>";
   document.querySelector("#focus-pagination").innerHTML = pages > 1 ? `<button class="icon-button" data-focus-page="${focusPage - 1}" ${focusPage === 0 ? "disabled" : ""} type="button" aria-label="上一页" title="上一页"><i data-lucide="arrow-left"></i></button><span>${focusPage + 1} / ${pages}</span><button class="icon-button" data-focus-page="${focusPage + 1}" ${focusPage === pages - 1 ? "disabled" : ""} type="button" aria-label="下一页" title="下一页"><i data-lucide="arrow-right"></i></button>` : "";
   const selected = visibleTasks().find((task) => task.id === data.selectedTaskId);
   document.querySelector("#timer-task").textContent = selected ? selected.title : "选择一项任务开始。";
@@ -349,7 +401,7 @@ async function refreshContext() {
     contextData = payload;
     renderApp();
   } catch (error) {
-    document.querySelector("#work-plan-updated").textContent = `更新失败：${error.message}`;
+    document.querySelector("#daily-brief-updated").textContent = `更新失败：${error.message}`;
   } finally {
     contextRefreshLoading = false;
     button.disabled = false;
@@ -482,7 +534,7 @@ async function refreshNews() {
 }
 
 // Rebuild every dynamic section after local changes.
-function renderApp() { renderInsights(); renderPriorities(); renderAllTasks(); renderProjects(); renderKanban(); renderFocusOptions(); renderSourceStatus(); renderWorkPlan(); lucide.createIcons(); }
+function renderApp() { renderDailyBrief(); renderPriorities(); renderAllTasks(); renderProjects(); renderKanban(); renderFocusOptions(); renderSourceStatus(); lucide.createIcons(); }
 
 // Switch between views without leaving the single-page workbench.
 function setView(view) {
@@ -509,6 +561,23 @@ function toggleTask(id) { const task = data.tasks.find((item) => item.id === id)
 
 // Delete a task after the user selects its delete control.
 function deleteTask(id) { data.tasks = data.tasks.filter((task) => task.id !== id); if (data.selectedTaskId === id) data.selectedTaskId = data.tasks[0]?.id || null; saveData(); renderApp(); }
+
+// Add a confirmed message to the browser-local task list without changing Feishu.
+function addBriefMessageTask(id) {
+  const message = (contextData.feishu?.messages || []).find((item) => item.id === id);
+  if (!message || data.tasks.some((task) => task.originMessageId === id)) return;
+  const title = `回复：${taskDisplayTitle({ title: message.chat || message.preview })}`;
+  const task = { id: `message-task-${Date.now()}`, title, project: "飞书消息", priority: "medium", status: "todo", due: "暂无日期", source: "message-confirmed", link: message.link, originMessageId: id };
+  data.tasks.unshift(task);
+  data.selectedTaskId ||= task.id;
+  dismissedBriefMessages.add(id);
+  saveDismissedBriefMessages();
+  saveData();
+  renderApp();
+}
+
+// Hide one message prompt locally after the user decides it is not actionable.
+function dismissBriefMessage(id) { dismissedBriefMessages.add(id); saveDismissedBriefMessages(); renderDailyBrief(); lucide.createIcons(); }
 
 // Move a task to a new board state.
 function changeTaskStatus(id, status) { const task = data.tasks.find((item) => item.id === id); if (!task) return; task.status = status; saveData(); renderApp(); }
@@ -548,9 +617,11 @@ function toggleSidebar() {
 // Wire shared controls, filters, navigation, and dialogs.
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const toggle = event.target.closest("[data-toggle-task]"); const deletion = event.target.closest("[data-delete-task]"); const choice = event.target.closest("[data-focus-task]"); const navigation = event.target.closest("[data-view], [data-go-to]"); const taskTab = event.target.closest("[data-task-filter]"); const newsTab = event.target.closest("[data-news-filter]"); const languageTab = event.target.closest("[data-news-language]"); const sidebarToggle = event.target.closest("#sidebar-toggle"); const focusPager = event.target.closest("[data-focus-page]"); const localPager = event.target.closest("[data-local-page]");
+    const toggle = event.target.closest("[data-toggle-task]"); const deletion = event.target.closest("[data-delete-task]"); const messageTask = event.target.closest("[data-add-message-task]"); const messageDismiss = event.target.closest("[data-dismiss-message]"); const choice = event.target.closest("[data-focus-task]"); const navigation = event.target.closest("[data-view], [data-go-to]"); const taskTab = event.target.closest("[data-task-filter]"); const newsTab = event.target.closest("[data-news-filter]"); const languageTab = event.target.closest("[data-news-language]"); const sidebarToggle = event.target.closest("#sidebar-toggle"); const focusPager = event.target.closest("[data-focus-page]"); const localPager = event.target.closest("[data-local-page]");
     if (toggle) toggleTask(toggle.dataset.toggleTask);
     if (deletion) deleteTask(deletion.dataset.deleteTask);
+    if (messageTask) addBriefMessageTask(messageTask.dataset.addMessageTask);
+    if (messageDismiss) dismissBriefMessage(messageDismiss.dataset.dismissMessage);
     if (choice) { data.selectedTaskId = choice.dataset.focusTask; saveData(); renderFocusOptions(); lucide.createIcons(); }
     if (navigation) setView(navigation.dataset.view || navigation.dataset.goTo);
     if (taskTab) { taskFilter = taskTab.dataset.taskFilter; document.querySelectorAll("[data-task-filter]").forEach((tab) => tab.classList.toggle("active", tab === taskTab)); renderAllTasks(); lucide.createIcons(); }

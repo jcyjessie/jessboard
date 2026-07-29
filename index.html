@@ -7,6 +7,7 @@
     <meta name="description" content="Jessboard 个人工作台：任务、项目排期、Codex 会话和资讯。" />
     <title>Jessboard · 个人工作台</title>
     <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="stylesheet" href="neat-annotations.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -52,14 +53,18 @@
           <div class="welcome-row">
             <div><p class="eyebrow">今日工作台</p><h2>你好，Jessie <span class="wave">✦</span></h2><p class="muted-copy">把来自 Codex、飞书和灵感流的事项，收拢到一个清晰的节奏里。</p></div>
           </div>
-          <div class="insight-grid" id="insight-grid"></div>
-          <section class="work-plan" aria-label="今日工作计划">
-            <div class="work-plan-heading"><div><p class="eyebrow">工作计划</p><h2>今天的工作计划</h2></div><div class="work-plan-actions"><span class="list-count" id="work-plan-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i>手动刷新</button></div></div>
-            <div class="work-plan-summary" id="work-plan-summary"></div>
-            <div class="work-plan-grid">
-              <section><div class="work-plan-subheading"><h3>优先推进</h3><span>基于排期、进度与更新时间</span></div><div class="work-plan-list" id="work-plan-list"></div></section>
-              <section class="agenda-column"><div class="work-plan-subheading"><h3>接下来的日程</h3><span>日历安排</span></div><div class="agenda-list" id="today-agenda"></div></section>
+          <section class="daily-brief" aria-label="每日工作简报">
+            <div class="daily-brief-heading"><div><p class="eyebrow">每日工作简报</p><h2>先处理会推动今天的事</h2><p class="muted-copy">任务、会议和飞书消息按下一步行动整理；消息需要你确认后才会成为个人任务。</p></div><div class="work-plan-actions"><span class="list-count" id="daily-brief-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i>手动刷新</button></div></div>
+            <div class="daily-brief-summary" id="daily-brief-summary"></div>
+            <div class="daily-main-grid">
+              <section class="brief-panel priority-brief"><div class="brief-panel-heading"><div><p class="eyebrow">今日必做</p><h3>优先推进</h3></div><span>截止、客户影响与依赖</span></div><div class="brief-list" id="daily-priority-list"></div></section>
+              <section class="brief-panel meeting-brief"><div class="brief-panel-heading"><div><p class="eyebrow">会议准备</p><h3>即将开始</h3></div><span>未来 48 小时</span></div><div class="brief-list" id="daily-meeting-list"></div></section>
             </div>
+            <div class="daily-secondary-grid">
+              <section class="brief-panel reply-brief"><div class="brief-panel-heading"><div><p class="eyebrow">待确认消息</p><h3>可能需要你回复</h3></div><span>不会自动建任务</span></div><div class="reply-list" id="daily-reply-list"></div></section>
+              <section class="brief-panel risk-brief"><div class="brief-panel-heading"><div><p class="eyebrow">风险与依赖</p><h3>避免工作停滞</h3></div><span>需要确认或跟进</span></div><div class="brief-list" id="daily-risk-list"></div></section>
+            </div>
+            <section class="daily-closeout" id="daily-closeout"></section>
           </section>
           <section class="panel projects-panel">
             <div class="panel-heading"><div><p class="eyebrow">工作流</p><h2>项目进度</h2></div><button class="text-button" data-go-to="projects" type="button">打开排期 <i data-lucide="arrow-up-right"></i></button></div>
@@ -120,6 +125,7 @@
 
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script src="work-plan.js"></script>
-    <script src="app.js?v=20260727-01"></script>
+    <script src="daily-brief.js?v=20260728-01"></script>
+    <script src="app.js?v=20260728-01"></script>
   </body>
 </html>
