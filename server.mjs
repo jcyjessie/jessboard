@@ -13,7 +13,10 @@ const userAgent = "jessboard-news/0.2.0 (+https://github.com/jcyjessie/jessboard
 const followBuildersBase = "https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/";
 const translationCache = new Map();
 const ollamaCache = new Map();
+const translationTimeoutMs = Number(process.env.NEWS_TRANSLATE_TIMEOUT_MS || 45000);
 let worldMonitorDetail = "本地 RSS · 原文";
+let financeDetail = "公开快讯";
+let openCliExecutable = null;
 let weatherCache = { expiresAt: 0, data: null };
 let contextRefreshPromise = null;
 const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", textNodeName: "#text", trimValues: true });
@@ -44,7 +47,36 @@ async function fetchXml(url, options = {}) {
 }
 
 // Normalize provider output into the small card format used by the UI.
-function item({ source, sourceLabel, title, summary, originalTitle, originalSummary, url, publishedAt, author, attribution }) { return { id: `${source}-${url || title}-${publishedAt || ""}`, source, sourceLabel, title, summary, originalTitle: originalTitle || title, originalSummary: originalSummary || summary, url, publishedAt, author, attribution }; }
+function item({ source, sourceLabel, title, summary, originalTitle, originalSummary, url, sourceUrl, publishedAt, author, attribution }) { return { id: `${source}-${url || title}-${publishedAt || ""}`, source, sourceLabel, title, summary, originalTitle: originalTitle || title, originalSummary: originalSummary || summary, url, sourceUrl, publishedAt, author, attribution }; }
+
+// Run a local read-only command and return its stdout without exposing shell interpolation.
+function runCommand(binary, args, timeout = 20000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(binary, args, { cwd: root, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill("SIGTERM"), timeout);
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.on("error", (error) => { clearTimeout(timer); reject(error); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(stdout);
+      else reject(new Error(stderr.trim() || `${path.basename(binary)} exited with code ${code}`));
+    });
+  });
+}
+
+// Resolve OpenCLI from an explicit setting or the active npm global prefix.
+async function resolveOpenCli() {
+  if (openCliExecutable) return openCliExecutable;
+  if (process.env.OPENCLI_BIN) return process.env.OPENCLI_BIN;
+  const npmPrefix = (await runCommand("npm", ["prefix", "-g"], 5000)).trim();
+  const candidate = path.join(npmPrefix, "bin", "opencli");
+  await fs.access(candidate);
+  openCliExecutable = candidate;
+  return candidate;
+}
 
 // Run a local Codex translation request over public news text only.
 function runCodexTranslation(prompt) {
@@ -53,7 +85,8 @@ function runCodexTranslation(prompt) {
     const child = spawn(binary, ["exec", "--ephemeral", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "-C", root], { cwd: root, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    const timeout = setTimeout(() => { child.kill("SIGTERM"); reject(new Error("翻译超时")); }, 90000);
+    // Translation is optional; never let it hold up a complete public-news refresh.
+    const timeout = setTimeout(() => { child.kill("SIGTERM"); reject(new Error("翻译超时，保留原文")); }, translationTimeoutMs);
     child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
     child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
     child.on("error", (error) => { clearTimeout(timeout); reject(error); });
@@ -69,26 +102,31 @@ function runCodexTranslation(prompt) {
 }
 
 // Parse a JSON array even when the model wraps it in a markdown code fence.
-function parseTranslation(text) {
+function parseTranslation(text, fallbackId = "") {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const arrayStart = text.indexOf("[");
   const arrayEnd = text.lastIndexOf("]");
   const candidate = fenced ? fenced[1] : arrayStart >= 0 && arrayEnd > arrayStart ? text.slice(arrayStart, arrayEnd + 1) : text.trim();
   const parsed = JSON.parse(candidate);
-  return Array.isArray(parsed) ? parsed : Array.isArray(parsed.items) ? parsed.items : parsed.id ? [parsed] : [];
+  if (Array.isArray(parsed)) return parsed;
+  if (Array.isArray(parsed.items)) return parsed.items;
+  if (parsed?.id) return [parsed];
+  if (parsed?.title || parsed?.summary) return [{ ...parsed, id: fallbackId }];
+  return [];
 }
 
 // Translate non-Chinese provider items and cache the result for this server run.
-async function translateItems(items) {
+async function translateItems(items, maximum = Infinity) {
   if (process.env.NEWS_TRANSLATE === "off" || !items.length) return { items, translated: false, detail: "原文" };
-  const pending = items.filter((entry) => !translationCache.has(entry.id));
+  const candidates = items.slice(0, maximum);
+  const pending = candidates.filter((entry) => !translationCache.has(entry.id));
   let translatedCount = 0;
   let lastError = "";
-  for (let index = 0; index < pending.length; index += 10) {
-    const batch = pending.slice(index, index + 10);
+  for (let index = 0; index < pending.length; index += 12) {
+    const batch = pending.slice(index, index + 12);
     const prompt = `你是资讯编辑。请把下面公开资讯翻译成简体中文。保留每个 id、URL、人名、公司名、产品名和技术词；只返回 JSON 数组，每项包含 id、title、summary，不要 Markdown，不要解释。中文要自然、简洁，适合资讯卡片。\n\n${JSON.stringify(batch.map((entry) => ({ id: entry.id, title: entry.title, summary: entry.summary, url: entry.url })))}`;
     try {
-      parseTranslation(await runCodexTranslation(prompt)).forEach((entry) => { if (entry.id) { translationCache.set(entry.id, { title: entry.title, summary: entry.summary }); translatedCount += 1; } });
+      parseTranslation(await runCodexTranslation(prompt)).forEach((entry) => { if (entry.id && entry.title) { translationCache.set(entry.id, { title: entry.title, summary: entry.summary || "暂无摘要" }); translatedCount += 1; } });
     } catch (error) { lastError = error.message; }
   }
   const translatedItems = items.map((entry) => ({ ...entry, ...(translationCache.get(entry.id) || {}) }));
@@ -96,13 +134,11 @@ async function translateItems(items) {
   return { items: translatedItems, translated: true, detail: translatedCount < pending.length ? `中文 · ${translatedCount}/${pending.length}` : "中文" };
 }
 
-// Read the public AI HOT API using its required non-browser identity.
+// Read the current AI HOT v1 selected feed using its required non-browser identity.
 async function loadAihot() {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  await fetchJson("https://aihot.virxact.com/api/public/version", { headers: { "user-agent": "aihot-skill/0.3.6 (+https://aihot.virxact.com/aihot-skill/)" }, timeout: 10000 });
-  const payload = await fetchJson(`https://aihot.virxact.com/api/public/items?mode=selected&since=${encodeURIComponent(since)}&take=30`, { headers: { "user-agent": "aihot-skill/0.3.6 (+https://aihot.virxact.com/aihot-skill/)" }, timeout: 20000 });
+  const payload = await fetchJson("https://aihot.virxact.com/api/v1/items?mode=selected&window=24h&limit=30", { headers: { "user-agent": "aihot-skill/1.3.0 (+https://aihot.virxact.com/aihot-skill/)" }, timeout: 20000 });
   const rows = Array.isArray(payload) ? payload : payload.items || [];
-  return rows.map((entry) => item({ source: "aihot", sourceLabel: "AI HOT", title: entry.title || entry.title_en, originalTitle: entry.title_en || entry.title, summary: entry.summary || "暂无摘要", originalSummary: entry.summary_en || entry.summary, url: entry.permalink || entry.url, publishedAt: entry.publishedAt, author: entry.source || "AI HOT", attribution: payload.attribution?.canonical || "AI HOT" }));
+  return rows.map((entry) => item({ source: "aihot", sourceLabel: "AI HOT", title: entry.title || entry.originalTitle, originalTitle: entry.originalTitle || entry.title, summary: entry.summary || "暂无摘要", originalSummary: entry.summary || "暂无摘要", url: entry.links?.aihot || entry.links?.original, publishedAt: entry.publishedAt || entry.discoveredAt, author: entry.source?.name || "AI HOT", attribution: payload.attribution?.canonical || "AI HOT" }));
 }
 
 // Read the central Follow Builders feeds without asking for private social credentials.
@@ -123,8 +159,15 @@ function cleanSocialText(value) { return String(value || "").replace(/https?:\/\
 // Exclude posts that contain no usable context beyond a short reaction or link.
 function isMeaningfulSocialText(value) { const compact = value.replace(/[\s\p{P}\p{S}]/gu, ""); return compact.length >= 8; }
 
+// Extract the original article URL embedded in feeds such as Hacker News RSS.
+function extractFeedArticleUrl(value) {
+  const raw = typeof value === "object" ? value?.["#text"] || "" : String(value || "");
+  const match = raw.match(/article\s+url\s*:\s*<a[^>]+href=["']([^"']+)["']/i);
+  return match?.[1] || null;
+}
+
 // Convert RSS and Atom documents into the normalized Jessboard item shape.
-function parseFeed(xml, feed) {
+function parseFeed(xml, feed, options = {}) {
   const document = xmlParser.parse(xml);
   const rssItems = document.rss?.channel?.item;
   const atomEntries = document.feed?.entry;
@@ -133,18 +176,53 @@ function parseFeed(xml, feed) {
     const linkValue = Array.isArray(entry.link) ? entry.link[0] : entry.link;
     const link = typeof linkValue === "object" ? linkValue?.["@_href"] : linkValue;
     const title = cleanFeedText(entry.title);
-    const summary = cleanFeedText(entry.description || entry.summary || entry.content || "暂无摘要");
+    const content = entry.description || entry.summary || entry.content || "暂无摘要";
+    const summary = cleanFeedText(content);
     const publishedAt = entry.pubDate || entry.published || entry.updated;
     const author = cleanFeedText(entry.author?.name || entry.author || entry.creator || feed.name);
     if (!title || !link) return null;
-    return item({ source: "worldmonitor", sourceLabel: "World Monitor Local", title, summary: summary.slice(0, 500), url: link, publishedAt, author, attribution: feed.name });
+    return item({ source: options.source || "worldmonitor", sourceLabel: options.sourceLabel || "World Monitor Local", title, summary: summary.slice(0, 500), url: extractFeedArticleUrl(content) || link, publishedAt, author, attribution: feed.name });
   }).filter(Boolean);
 }
 
 // Remove feed markup and entities before displaying or summarizing a story.
 function cleanFeedText(value) {
   const text = typeof value === "object" ? value?.["#text"] || "" : String(value || "");
-  return text.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"').replace(/\s+/g, " ").trim();
+  return text.replace(/<[^>]*>/g, " ").replace(/article\s+url\s*:\s*url\s*:?/gi, "").replace(/comments?\s+url\s*:\s*url\s*:?/gi, "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"').replace(/\s+/g, " ").trim();
+}
+
+// Normalize a title for conservative cross-source duplicate detection.
+function normalizedTitle(value = "") { return String(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""); }
+
+// Identify product and model names that reliably point to the same news event.
+function storyEntities(item) {
+  const text = `${item.title || ""} ${item.originalTitle || ""}`.toLowerCase();
+  return new Set((text.match(/\b(?:qwen|gpt|claude|gemini|llama|deepseek|kimi|grok)[\w.-]*/g) || []).map((entry) => entry.replace(/[._]/g, "")));
+}
+
+// Merge only clearly matching reports, retaining the higher-priority source and all source labels.
+function deduplicateNewsItems(items) {
+  const merged = [];
+  const sourceRank = { aihot: 3, worldmonitor: 2.8, crypto: 2.6, finance: 2.5, builders: 1 };
+  for (const candidate of items) {
+    const candidateTitle = normalizedTitle(candidate.title || candidate.originalTitle);
+    const candidateEntities = storyEntities(candidate);
+    const candidateTime = new Date(candidate.publishedAt || 0).getTime();
+    const match = merged.find((existing) => {
+      const existingTitle = normalizedTitle(existing.title || existing.originalTitle);
+      const sameUrl = candidate.url && existing.url && candidate.url === existing.url;
+      const sameTitle = candidateTitle.length >= 12 && existingTitle.length >= 12 && (candidateTitle.includes(existingTitle) || existingTitle.includes(candidateTitle));
+      const sharedEntity = [...candidateEntities].some((entity) => storyEntities(existing).has(entity) && entity.length >= 6);
+      const existingTime = new Date(existing.publishedAt || 0).getTime();
+      const closeInTime = !candidateTime || !existingTime || Math.abs(candidateTime - existingTime) <= 3 * 24 * 60 * 60 * 1000;
+      return sameUrl || closeInTime && (sameTitle || sharedEntity);
+    });
+    if (!match) { merged.push({ ...candidate, sourceLabels: [candidate.sourceLabel] }); continue; }
+    const primary = (sourceRank[candidate.source] || 0) > (sourceRank[match.source] || 0) ? candidate : match;
+    const labels = [...new Set([...(match.sourceLabels || [match.sourceLabel]), candidate.sourceLabel])];
+    Object.assign(match, primary, { sourceLabels: labels, sourceLabel: labels.join(" + ") });
+  }
+  return merged;
 }
 
 // Ask the local Ollama service for compact Chinese headline and summary text.
@@ -156,7 +234,7 @@ async function summarizeWithOllama(items) {
     const prompt = `你是中文报纸编辑。请把下面公开 RSS 资讯改写成简体中文，保留 id、URL、人名、公司名和技术词。只返回一个 JSON 对象，包含 id、title、summary。标题不超过 32 字，摘要不超过 80 字，不要 Markdown，不要解释。\n\n${JSON.stringify(pending[0])}`;
     try {
       const response = await fetchJson(`${process.env.OLLAMA_API_URL || "http://127.0.0.1:11434"}/api/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model, prompt, stream: false, format: "json", think: false }), timeout: 120000 });
-      const parsed = parseTranslation(response.response || "[]");
+      const parsed = parseTranslation(response.response || "[]", pending[0].id);
       parsed.forEach((entry) => { if (entry.id && entry.title) ollamaCache.set(entry.id, { title: entry.title, summary: entry.summary || "暂无摘要" }); });
       const first = parsed[0];
       if (first?.title && !ollamaCache.has(pending[0].id)) ollamaCache.set(pending[0].id, { title: first.title, summary: first.summary || "暂无摘要" });
@@ -197,6 +275,36 @@ async function loadWorldMonitor() {
   return process.env.WORLD_MONITOR_MODE === "hosted" ? loadWorldMonitorHosted() : loadWorldMonitorLocal();
 }
 
+// Load the configured public RSS feeds for crypto media and protocol announcements.
+async function loadCryptoNews() {
+  const feeds = JSON.parse(await fs.readFile(path.join(root, "data", "crypto-feeds.json"), "utf8"));
+  const results = await Promise.allSettled(feeds.map(async (feed) => parseFeed(await fetchXml(feed.url, { timeout: 12000 }), feed, { source: "crypto", sourceLabel: "加密与链上" })));
+  const entries = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  if (!entries.length) throw new Error("公开加密 RSS 暂不可用");
+  const seen = new Set();
+  return entries.filter((entry) => { const key = entry.url || entry.title; if (seen.has(key)) return false; seen.add(key); return true; }).sort((left, right) => new Date(right.publishedAt || 0) - new Date(left.publishedAt || 0)).slice(0, 40);
+}
+
+// Load only the explicitly configured public OpenCLI finance-news commands.
+async function loadFinanceNews() {
+  const sources = JSON.parse(await fs.readFile(path.join(root, "data", "finance-news-sources.json"), "utf8"));
+  const binary = await resolveOpenCli();
+  const results = await Promise.allSettled(sources.map(async (source) => {
+    const raw = await runCommand(binary, [...source.command, "-f", "json"], 25000);
+    const rows = JSON.parse(raw);
+    if (!Array.isArray(rows)) throw new Error(`${source.name} did not return a list`);
+    return rows.map((entry) => {
+      const summary = String(entry[source.summaryField] || entry[source.titleField] || "").trim();
+      const title = String(entry[source.titleField] || summary.slice(0, 72) || source.name).trim();
+      return item({ source: "finance", sourceLabel: "传统金融", title, summary, sourceUrl: source.sourceUrl, publishedAt: entry[source.dateField], author: source.name, attribution: source.name });
+    }).filter((entry) => entry.title && entry.summary);
+  }));
+  const successful = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  if (!successful.length) throw new Error("公开财经快讯暂不可用");
+  financeDetail = `${successful.length} 条 · ${results.filter((result) => result.status === "fulfilled").length}/${sources.length} 来源`;
+  return successful.sort((left, right) => new Date(right.publishedAt || 0) - new Date(left.publishedAt || 0)).slice(0, 30);
+}
+
 // Read current Shanghai weather and cache it briefly to keep manual refreshes lightweight.
 async function loadShanghaiWeather() {
   if (weatherCache.data && weatherCache.expiresAt > Date.now()) return weatherCache.data;
@@ -207,21 +315,24 @@ async function loadShanghaiWeather() {
   return data;
 }
 
-// Run the three providers independently so one failure never hides the others.
+// Run every provider independently so one failure never hides the remaining sources.
 async function loadNews() {
   const providers = {};
-  const results = await Promise.allSettled([loadAihot(), loadBuilders(), loadWorldMonitor()]);
-  const names = ["aihot", "builders", "worldmonitor"];
+  const results = await Promise.allSettled([loadAihot(), loadBuilders(), loadWorldMonitor(), loadFinanceNews(), loadCryptoNews()]);
+  const names = ["aihot", "builders", "worldmonitor", "finance", "crypto"];
   const items = [];
   results.forEach((result, index) => { const name = names[index]; if (result.status === "fulfilled") { providers[name] = { state: "ready", detail: `${result.value.length} 条` }; items.push(...result.value); } else { providers[name] = { state: "error", detail: result.reason?.message || "暂不可用" }; } });
-  const [builderTranslation, worldTranslation] = await Promise.all([
-    translateItems(items.filter((entry) => entry.source === "builders")),
-    translateItems(items.filter((entry) => entry.source === "worldmonitor"))
-  ]);
-  const translatedById = new Map([...builderTranslation.items, ...worldTranslation.items].map((entry) => [entry.id, entry]));
-  items.splice(0, items.length, ...items.map((entry) => translatedById.get(entry.id) || entry));
-  if (providers.builders?.state === "ready") providers.builders.detail = `${providers.builders.detail} · ${builderTranslation.detail}`;
-  if (providers.worldmonitor?.state === "ready") providers.worldmonitor.detail = `${providers.worldmonitor.detail} · ${worldMonitorDetail} · ${worldTranslation.detail}`;
+  const translation = await translateItems(items.filter((entry) => ["builders", "worldmonitor", "crypto"].includes(entry.source)), 12);
+  const translatedById = new Map(translation.items.map((entry) => [entry.id, entry]));
+  items.splice(0, items.length, ...deduplicateNewsItems(items.map((entry) => translatedById.get(entry.id) || entry)));
+  const translationDetail = (source) => {
+    const translated = translation.items.filter((entry) => entry.source === source && translationCache.has(entry.id)).length;
+    return translated ? `中文 ${translated} 条` : "英文原文";
+  };
+  if (providers.builders?.state === "ready") providers.builders.detail = `${providers.builders.detail} · ${translationDetail("builders")}`;
+  if (providers.worldmonitor?.state === "ready") providers.worldmonitor.detail = `${providers.worldmonitor.detail} · ${translationDetail("worldmonitor")}`;
+  if (providers.finance?.state === "ready") providers.finance.detail = `${providers.finance.detail} · ${financeDetail}`;
+  if (providers.crypto?.state === "ready") providers.crypto.detail = `${providers.crypto.detail} · ${translationDetail("crypto")}`;
   items.sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
   return { fetchedAt: new Date().toISOString(), providers, items };
 }
@@ -229,20 +340,29 @@ async function loadNews() {
 // Read the local context snapshot written by the sync command.
 async function loadContext() { try { return JSON.parse(await fs.readFile(path.join(root, "data", "context.json"), "utf8")); } catch { return { codex: [], feishu: { tasks: [], schedule: [], notes: [], messages: [] }, sources: { codex: "empty", feishu: "not-configured" } }; } }
 
-// Run one local read-only snapshot refresh and share it with concurrent dashboard requests.
+// Run one local read-only snapshot refresh and preserve the last good snapshot on partial failure.
 function refreshContext() {
   if (contextRefreshPromise) return contextRefreshPromise;
   contextRefreshPromise = new Promise((resolve, reject) => {
+    const startedAt = Date.now();
     const child = spawn(process.execPath, ["sync.mjs"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
-    const timeout = setTimeout(() => child.kill("SIGTERM"), 120000);
+    let settled = false;
+    const timeout = setTimeout(() => child.kill("SIGTERM"), 300000);
     child.stdout.on("data", (chunk) => { output += chunk; });
     child.stderr.on("data", (chunk) => { output += chunk; });
-    child.on("error", reject);
-    child.on("close", (code) => {
+    child.on("error", (error) => { if (!settled) { settled = true; clearTimeout(timeout); reject(error); } });
+    child.on("close", async (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
-      if (code === 0) resolve();
-      else reject(new Error(output.trim() || "Snapshot refresh failed."));
+      try {
+        const snapshot = await fs.stat(path.join(root, "data", "context.json"));
+        if (code === 0 || snapshot.mtimeMs >= startedAt) { resolve({ partial: code !== 0 }); return; }
+        resolve({ partial: true });
+        return;
+      } catch { /* No written snapshot is available to preserve. */ }
+      reject(new Error(output.trim() || "Snapshot refresh failed."));
     });
   }).finally(() => { contextRefreshPromise = null; });
   return contextRefreshPromise;
@@ -267,7 +387,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestUrl.pathname === "/api/news") { try { sendJson(response, 200, await loadNews()); } catch (error) { sendJson(response, 502, { error: error.message }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/weather/shanghai") { try { sendJson(response, 200, await loadShanghaiWeather()); } catch (error) { sendJson(response, 502, { error: `上海天气暂不可用：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/context") { sendJson(response, 200, await loadContext()); return; }
-  if (request.method === "POST" && requestUrl.pathname === "/api/context/refresh") { try { await refreshContext(); sendJson(response, 200, await loadContext()); } catch (error) { sendJson(response, 502, { error: `同步失败：${error.message}` }); } return; }
+  if (request.method === "POST" && requestUrl.pathname === "/api/context/refresh") { try { const refresh = await refreshContext(); const context = await loadContext(); context.refresh = refresh; sendJson(response, 200, context); } catch (error) { sendJson(response, 502, { error: `同步失败：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/dev-metrics") { try { const range = ["24h", "7d", "30d", "all"].includes(requestUrl.searchParams.get("range")) ? requestUrl.searchParams.get("range") : "all"; sendJson(response, 200, await loadDevelopmentMetrics(range)); } catch (error) { sendJson(response, 502, { error: `开发数据暂不可用：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/health") { sendJson(response, 200, { ok: true, service: "jessboard" }); return; }
   if (request.method === "GET") { await serveStatic(requestUrl.pathname, response); return; }

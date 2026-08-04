@@ -1,0 +1,18 @@
+[
+  {
+    "name": "东方财富 7x24",
+    "sourceUrl": "https://kuaixun.eastmoney.com/",
+    "command": ["eastmoney", "kuaixun", "--column", "102", "--limit", "15"],
+    "titleField": "title",
+    "summaryField": "summary",
+    "dateField": "time"
+  },
+  {
+    "name": "新浪财经 7x24",
+    "sourceUrl": "https://finance.sina.com.cn/7x24/",
+    "command": ["sinafinance", "news", "--type", "2", "--limit", "15"],
+    "titleField": "content",
+    "summaryField": "content",
+    "dateField": "time"
+  }
+]

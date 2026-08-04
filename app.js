@@ -11,7 +11,10 @@ let newsFilter = "all";
 let newsLanguage = localStorage.getItem("jessboard-language") === "en" ? "en" : "zh";
 let newsPage = 0;
 const newsPageSize = 7;
+const newsSnapshotKey = "jessboard-news-snapshot-v1";
+let newsLoading = false;
 let taskFilter = "all";
+let priorityFilter = "all";
 let devMetrics = null;
 let devMetricsLoading = false;
 let devRange = localStorage.getItem("jessboard-dev-range") || "7d";
@@ -24,6 +27,26 @@ let focusPage = 0;
 const focusPageSize = 8;
 const dismissedBriefMessagesKey = "jessboard-dismissed-brief-messages-v1";
 let dismissedBriefMessages = loadDismissedBriefMessages();
+
+const interfaceCopy = {
+  zh: {
+    navDashboard: "总览", navToday: "我的任务", navProjects: "项目排期", navFocus: "专注", navDev: "开发分析", navNews: "资讯", newTask: "新建任务", chineseFont: "中文字体", englishFont: "英文字体",
+    todayWorkspace: "今日工作台", greeting: "你好，Jessie", dailyBrief: "每日工作简报", dailyBriefTitle: "先处理会推动今天的事", dailyBriefCopy: "任务、会议和飞书消息按下一步行动整理；消息需要你确认后才会成为个人任务。", manualRefresh: "手动刷新", newsScope: "AI 与开发 · 产品与公司 · 全球市场 · 金融与加密", newsSourcesCopy: "所有来源合并后按市场、主题、时效和重要度编辑；来源名称与可用原文或快讯入口始终保留。", newsEditorNote: "编辑规则：头条依据可靠度、时效、影响范围和信息密度排序；每篇新闻显示对应市场、主题和重要度。默认中文，可切换英文原文。", newsFilterAll: "全部", newsFilterAiBuilders: "AI 与开发", newsFilterProduct: "产品与公司", newsFilterWorld: "市场、政策与安全", newsFilterFinanceCrypto: "金融与加密", providerAihot: "中文 AI 精选", providerBuilders: "AI Builder 观点", providerWorld: "全球情报", providerFinance: "公开财经快讯", providerCrypto: "公开加密资讯", topicAi: "AI 与模型", topicMarket: "市场与政策", topicProduct: "产品与公司", topicBuilders: "开发者生态", topicSecurity: "安全", topicFinance: "传统金融", topicCrypto: "加密与链上", marketChina: "中国", marketEurope: "欧洲", marketUs: "美国", marketApac: "亚太", marketGlobal: "全球", marketCrypto: "加密市场",
+    mustDo: "今日必做", priorityTitle: "优先推进", priorityHint: "截止、客户影响与依赖", meetingPrep: "会议准备", meetingTitle: "即将开始", next48Hours: "未来 48 小时", pendingMessages: "待确认消息", replyTitle: "可能需要你回复", noAutoTask: "不会自动建任务", risks: "风险与依赖", riskTitle: "避免工作停滞", riskHint: "需要确认或跟进",
+    workflow: "工作流", projectProgress: "项目进度", openSchedule: "打开排期", dataConnections: "数据连接", workContext: "你的工作上下文", viewBrief: "查看资讯", darkMode: "切换深色模式", lightMode: "切换明亮模式",
+    waitingSync: "等待同步", noDate: "暂无时间", noProject: "未归类", projectSource: "飞书与 Codex 上下文", active: "项进行中", completed: "项已完成", current: "当前：", noCurrentProject: "暂未发现与你直接相关的项目。", updatedAt: "更新于 ", priorityAction: "优先处理", priorityCount: "项优先推进", meetingCount: "个今日会议", replyCount: "条待确认消息", waitingCount: "项外部依赖", quietDay: "今天没有需要立即处理的事项", noPriority: "今天没有需要推进的工作。", noMeeting: "未来 48 小时没有需要准备的会议。", noReply: "没有需要人工确认的消息。", noRisk: "当前没有明显的截止或依赖风险。", closeout: "日终闭环", closeoutTitle: "完成与待跟进事项", closeoutCopy: "仅展示飞书已同步的完成事项和仍需跟进的风险。", nextRisk: "下一项风险：", projectDetails: "项目详情", projectItems: "进行项", projectNextStep: "下一步：", allPriorities: "所有优先级", today: "今天", feishuSynced: "飞书同步", feishuSyncedHint: "同步来源：飞书，状态请在飞书中更新。", prepare: "需准备", related: "关联：", viewMessage: "查看消息", addTask: "加入任务", dismiss: "忽略", messageFrom: "飞书消息", unknownSender: "未知发送人", startHere: "start here", checkDependency: "check dependency", taskList: "工作清单", myTasks: "我的任务", taskListCopy: "把今天要推进的事，放在一个可以完成的列表里。", clearCompleted: "清除已完成", deliveryCadence: "交付节奏", projectSchedule: "项目排期", projectScheduleCopy: "从计划到复盘，按状态查看每一项工作。", localSchedule: "本地排期", focusSession: "专注时段", focusOne: "一次只做一件事", currentFocus: "当前专注", selectTask: "选择一项任务开始。", startFocus: "开始专注", focusGoal: "专注目标", selectTaskHeading: "选择任务", all: "全部", open: "未完成", done: "已完成", todo: "计划中", progress: "进行中", review: "待复盘", high: "高优先级", medium: "中优先级", low: "低优先级", noTasks: "这里还没有相关任务。", noColumnTasks: "暂无任务"
+  },
+  en: {
+    navDashboard: "Overview", navToday: "Tasks", navProjects: "Projects", navFocus: "Focus", navDev: "Dev", navNews: "Brief", newTask: "New task", chineseFont: "Chinese font", englishFont: "English font",
+    todayWorkspace: "Today", greeting: "Hello, Jessie", dailyBrief: "Daily brief", dailyBriefTitle: "Focus on the work that moves today forward", dailyBriefCopy: "Tasks, meetings, and messages are arranged around the next action. Messages become tasks only after you confirm them.", manualRefresh: "Refresh", newsScope: "AI and builders · Products · Global markets · Finance and crypto", newsSourcesCopy: "Sources are merged and edited by market, topic, recency, and importance. Every item keeps its source and the available article or briefing entry point.", newsEditorNote: "Headlines are ranked by reliability, recency, impact, and information density. Each story shows its market, topic, and importance.", newsFilterAll: "All", newsFilterAiBuilders: "AI and builders", newsFilterProduct: "Products and companies", newsFilterWorld: "Markets, policy and security", newsFilterFinanceCrypto: "Finance and crypto", providerAihot: "Chinese AI selection", providerBuilders: "AI Builder views", providerWorld: "Global intelligence", providerFinance: "Public finance flashes", providerCrypto: "Public crypto news", topicAi: "AI and models", topicMarket: "Markets and policy", topicProduct: "Products and companies", topicBuilders: "Developer ecosystem", topicSecurity: "Security", topicFinance: "Traditional finance", topicCrypto: "Crypto and on-chain", marketChina: "China", marketEurope: "Europe", marketUs: "United States", marketApac: "Asia Pacific", marketGlobal: "Global", marketCrypto: "Crypto markets",
+    mustDo: "Today", priorityTitle: "Priority work", priorityHint: "Due dates, customer impact, and dependencies", meetingPrep: "Meetings", meetingTitle: "Coming up", next48Hours: "Next 48 hours", pendingMessages: "Messages to review", replyTitle: "May need a reply", noAutoTask: "Never creates tasks automatically", risks: "Risks and dependencies", riskTitle: "Prevent work from stalling", riskHint: "Needs confirmation or follow-up",
+    workflow: "Workflow", projectProgress: "Project progress", openSchedule: "Open schedule", dataConnections: "Connections", workContext: "Your work context", viewBrief: "View brief", darkMode: "Switch to dark mode", lightMode: "Switch to light mode",
+    waitingSync: "Waiting for sync", noDate: "No date", noProject: "Uncategorized", projectSource: "Feishu and Codex context", active: "active", completed: "completed", current: "Current: ", noCurrentProject: "No current projects directly related to you were found.", updatedAt: "Updated ", priorityAction: "Priority", priorityCount: "priority items", meetingCount: "meetings today", replyCount: "messages to review", waitingCount: "external dependencies", quietDay: "Nothing needs immediate attention today", noPriority: "No work needs attention today.", noMeeting: "No meetings need preparation in the next 48 hours.", noReply: "No messages need a manual decision.", noRisk: "No clear deadline or dependency risk right now.", closeout: "Day-end summary", closeoutTitle: "Completed and follow-up items", closeoutCopy: "Shows only completed Feishu items and risks that still need follow-up.", nextRisk: "Next risk: ", projectDetails: "Project details", projectItems: "Active items", projectNextStep: "Next step: ", allPriorities: "All priorities", today: "Today", feishuSynced: "Feishu sync", feishuSyncedHint: "Synced from Feishu. Update its status in Feishu.", prepare: "Prepare", related: "Related: ", viewMessage: "View message", addTask: "Add task", dismiss: "Dismiss", messageFrom: "Feishu message", unknownSender: "Unknown sender", startHere: "start here", checkDependency: "check dependency", taskList: "Task list", myTasks: "My tasks", taskListCopy: "Keep today’s work in one list that you can complete.", clearCompleted: "Clear completed", deliveryCadence: "Delivery rhythm", projectSchedule: "Project schedule", projectScheduleCopy: "Review each work item from planning through follow-up.", localSchedule: "Local schedule", focusSession: "Focus session", focusOne: "Do one thing at a time", currentFocus: "Current focus", selectTask: "Choose a task to begin.", startFocus: "Start focus", focusGoal: "Focus goal", selectTaskHeading: "Choose a task", all: "All", open: "Open", done: "Done", todo: "Planned", progress: "In progress", review: "Review", high: "High priority", medium: "Medium priority", low: "Low priority", noTasks: "There are no related tasks here yet.", noColumnTasks: "No tasks"
+  }
+};
+
+// Return interface copy in the currently selected language.
+function t(key) { return interfaceCopy[newsLanguage][key] || key; }
 
 // Remove the previous demo board once, then keep future local edits intact.
 function loadData() {
@@ -64,18 +87,22 @@ function priorityColor(priority) { return { high: "#cc680a", medium: "#6e8175", 
 // Remove long links and excess detail from task titles while preserving the source record link.
 function taskDisplayTitle(task) { const text = String(task.title || "Untitled task").replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim(); return text.length > 58 ? `${text.slice(0, 58)}…` : text; }
 
-// Group synchronized Project items by the concrete business theme in their safe task metadata.
+// Keep project progress focused on the work domains relevant to this workspace.
+function isRelevantProjectTask(task) {
+  const text = `${task.title || ""} ${task.project || ""} ${task.nextStep || ""}`;
+  return !/ledger|对账|recon|parser|充提|currency|entryreclassifier|历史数据回溯|eth2|bitmex|bitget|bitmart|kraken|okx|binance|币安|apex|tiger|xstocks|gate|cecapital|pnl|pyth|zama|alpha|合约|资产|股票/i.test(text);
+}
+
+// Group relevant synchronized Project items by their concrete business theme.
 function clusterProjectTasks(tasks) {
   const themes = [
     { name: "风险与可靠性", color: "#cc680a", pattern: /风控|sentry|告警|\bvar\b|rpc|influx|position-to-oi|价格偏离|debank/i },
-    { name: "账本与对账", color: "#5d7f83", pattern: /ledger|对账|recon|parser|充提|currency|entryreclassifier|历史数据回溯|eth2/i },
-    { name: "交易所与资产接入", color: "#405740", pattern: /bitmex|bitget|bitmart|kraken|okx|binance|币安|apex|tiger|xstocks|gate|cecapital|pnl|pyth|zama|alpha|合约|资产|股票/i },
     { name: "平台与工作流", color: "#6e8175", pattern: /工具|openapi|formula|table view|hermes|投组|编辑和删除|委托/i }
   ];
   const groups = new Map(themes.map((theme) => [theme.name, { ...theme, tasks: [] }]));
-  for (const task of tasks || []) {
+  for (const task of (tasks || []).filter(isRelevantProjectTask)) {
     const text = `${task.title || ""} ${task.project || ""} ${task.nextStep || ""}`;
-    const theme = themes.find((item) => item.pattern.test(text)) || themes[3];
+    const theme = themes.find((item) => item.pattern.test(text)) || themes[1];
     groups.get(theme.name).tasks.push(task);
   }
   return [...groups.values()].filter((group) => group.tasks.length).map((group) => {
@@ -110,8 +137,16 @@ function buildDevelopmentInsights(codex, localGit, github) {
 // Derive a consistent priority from the task deadline and recent activity.
 function taskPriority(task) { const due = new Date(task.dueAt || task.due || 0).getTime(); const now = Date.now(); if (due && due < now) return "high"; if (due && due <= now + 48 * 60 * 60 * 1000) return "high"; if (due && due <= now + 7 * 24 * 60 * 60 * 1000) return "medium"; return task.priority || "low"; }
 
-// Hide old unmaintained assignments that are no longer active work.
-function isStaleTask(task) { const due = new Date(task.dueAt || 0).getTime(); const updated = new Date(task.updatedAt || task.createdAt || 0).getTime(); const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000; return task.source === "lark-task" && due > 0 && due < cutoff && (!updated || updated < cutoff); }
+// Hide stale open Feishu assignments while preserving completed source history.
+function isStaleTask(task) {
+  if (task.source !== "lark-task" || task.status === "done") return false;
+  const due = new Date(task.dueAt || 0).getTime();
+  const updated = new Date(task.updatedAt || task.createdAt || 0).getTime();
+  const overdueCutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const undatedCutoff = Date.now() - 21 * 24 * 60 * 60 * 1000;
+  if (!due) return !updated || updated < undatedCutoff;
+  return due < overdueCutoff && (!updated || updated < overdueCutoff);
+}
 
 // Add derived display fields to synchronized or locally created work items.
 function prepareTask(task) { return { ...task, priority: taskPriority(task), displayTitle: taskDisplayTitle(task) }; }
@@ -122,11 +157,63 @@ function syncedWorkTasks() { return [...(contextData.feishu?.todoTasks || []), .
 // Combine read-only synchronized work with optional browser-local personal tasks.
 function visibleTasks() { return [...syncedWorkTasks(), ...data.tasks.map(prepareTask)]; }
 
-// Translate an internal task state into a readable Chinese label.
-function statusLabel(status) { return { todo: "计划中", progress: "进行中", review: "待复盘", done: "已完成" }[status] || "计划中"; }
+// Select current work directly assigned to Jessie, plus active Codex sessions that support it.
+function currentWorkGroups() {
+  const cutoff = Date.now() - 45 * 24 * 60 * 60 * 1000;
+  const directTasks = [...(contextData.feishu?.todoTasks || []), ...(contextData.feishu?.inferredTasks || [])]
+    .filter((task) => task.assignedToMe || task.source === "lark-inferred")
+    .filter((task) => !isStaleTask(task))
+    .filter((task) => task.status !== "done")
+    .filter((task) => new Date(task.updatedAt || task.createdAt || 0).getTime() >= cutoff)
+    .map(prepareTask);
+  const activeSessions = (contextData.codex || []).filter((session) => session.status === "active");
+  const topicCandidates = ["backlog", "pnl", "eod", "图表", "实时", "open api", "openapi", "heatmap", "需求", "测试", "验收", "评审"];
+  const workSignals = `${directTasks.map((task) => `${task.title} ${task.project}`).join(" ")} ${activeSessions.map((session) => session.title).join(" ")}`.toLowerCase();
+  const currentTopics = topicCandidates.filter((topic) => workSignals.includes(topic));
+  const relatedProjectTasks = (contextData.feishu?.tasks || [])
+    .filter(isRelevantProjectTask)
+    .filter((task) => new Date(task.updatedAt || task.createdAt || 0).getTime() >= cutoff)
+    .filter((task) => currentTopics.some((topic) => `${task.title || ""} ${task.project || ""}`.toLowerCase().includes(topic)))
+    .map(prepareTask);
+  const tasks = [...directTasks, ...relatedProjectTasks];
+  const themes = [
+    { name: newsLanguage === "en" ? "Product and delivery" : "产品与交付", color: "#86c8eb", pattern: /需求|prd|评审|验收|测试|回顾|backlog|方案|文档/i },
+    { name: newsLanguage === "en" ? "Data and dashboard" : "数据与看板", color: "#b8f85b", pattern: /实时|eod|pnl|图表|heatmap|估值|数据|dashboard/i },
+    { name: newsLanguage === "en" ? "Team follow-up" : "协作与跟进", color: "#f2b86f", pattern: /.*/ }
+  ];
+  const groups = new Map(themes.map((theme) => [theme.name, { ...theme, tasks: [] }]));
+  tasks.forEach((task) => groups.get((themes.find((theme) => theme.pattern.test(`${task.title} ${task.project}`)) || themes[2]).name).tasks.push(task));
+  const directGroups = [...groups.values()].filter((group) => group.tasks.length).map((group) => {
+    const completed = group.tasks.filter((task) => task.status === "done" || Number(task.progress) >= 100).length;
+    const progress = Math.round(group.tasks.reduce((sum, task) => sum + taskProgress(task), 0) / group.tasks.length);
+    const preview = [...group.tasks].sort((left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0))[0];
+    return { ...group, completed, active: group.tasks.length - completed, progress, preview };
+  });
+  const sessions = activeSessions.slice(0, 2);
+  if (sessions.length) directGroups.push({ name: newsLanguage === "en" ? "Active Codex work" : "正在进行的 Codex 工作", color: "#b8f85b", active: sessions.length, completed: 0, progress: 50, preview: { title: sessions[0].title, nextStep: sessions[0].cwd ? sessions[0].cwd.split("/").pop() : "Codex" } });
+  return directGroups.slice(0, 3);
+}
 
-// Format an ISO date in the app's Chinese display style.
-function formatDate(value, withTime = false) { if (!value) return "暂无时间"; const date = new Date(value); if (Number.isNaN(date.getTime())) return value; return new Intl.DateTimeFormat("zh-CN", withTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" }).format(date); }
+// Translate an internal task state into a readable Chinese label.
+function statusLabel(status) { return t(status) || t("todo"); }
+
+// Format an ISO date in the app's current display language.
+function formatDate(value, withTime = false) { if (!value) return newsLanguage === "en" ? "No date" : "暂无时间"; const date = new Date(value); if (Number.isNaN(date.getTime())) return value; return new Intl.DateTimeFormat(newsLanguage === "en" ? "en-US" : "zh-CN", withTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" }).format(date); }
+
+// Return a concise meeting time, omitting the date for events happening today.
+function formatMeetingTime(value) {
+  if (!value) return t("noDate");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const today = new Date();
+  const isToday = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+  if (!isToday) return formatDate(value, true);
+  const time = new Intl.DateTimeFormat(newsLanguage === "en" ? "en-US" : "zh-CN", { hour: "2-digit", minute: "2-digit" }).format(date);
+  return newsLanguage === "en" ? `${t("today")}, ${time}` : `${t("today")} ${time}`;
+}
+
+// Calculate a readable progress value when a source item has no explicit percentage.
+function taskProgress(task) { return Number.isFinite(Number(task.progress)) ? Number(task.progress) : task.status === "done" ? 100 : task.status === "review" ? 75 : task.status === "progress" ? 50 : 0; }
 
 // Build an individual task row for a task list.
 function taskRow(task, includeDelete = true) {
@@ -136,7 +223,7 @@ function taskRow(task, includeDelete = true) {
   const control = synced ? `<a class="task-toggle task-source-link" href="${escapeHtml(task.link || "#")}" ${task.link ? "target=\"_blank\" rel=\"noreferrer\"" : ""} aria-label="在飞书中打开：${escapeHtml(task.title)}" title="在飞书中打开"><i data-lucide="arrow-up-right"></i></a>` : `<button class="task-toggle" data-toggle-task="${escapeHtml(task.id)}" type="button" aria-label="${done ? "标记未完成" : "标记完成"}：${escapeHtml(task.title)}">${done ? "<i data-lucide=\"check\"></i>" : ""}</button>`;
   return `<article class="task-row ${done ? "done" : ""}" style="--task-color:${priorityColor(task.priority)}">
     ${control}
-    <div><div class="task-title" title="${escapeHtml(task.title)}">${escapeHtml(title)}</div><div class="task-meta"><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${task.priority === "high" ? "高优先级" : task.priority === "medium" ? "中优先级" : "低优先级"}</span> ${escapeHtml(task.project || "未归类")}</div></div>
+    <div><div class="task-title" title="${escapeHtml(task.title)}">${escapeHtml(title)}</div><div class="task-meta"><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${t(task.priority)}</span> ${escapeHtml(task.project || t("noProject"))}</div></div>
     <span class="task-due">${escapeHtml(formatDate(task.dueAt || task.due))}</span>
     ${includeDelete ? `<button class="task-delete" data-delete-task="${escapeHtml(task.id)}" type="button" aria-label="删除任务：${escapeHtml(task.title)}" title="删除任务"><i data-lucide="trash-2"></i></button>` : "<span class=\"priority-dot\"></span>"}
   </article>`;
@@ -164,19 +251,20 @@ function dailyBriefTaskItem(task, annotation = null) {
   const link = task.link ? `<a class="brief-open" href="${escapeHtml(task.link)}" target="_blank" rel="noreferrer" aria-label="在飞书中打开：${escapeHtml(task.title)}" title="在飞书中打开"><i data-lucide="arrow-up-right"></i></a>` : "";
   const annotationClass = annotation ? ` ann ann-s ann-${annotation.color} ann-no-mark` : "";
   const annotationNote = annotation ? ` data-note="${escapeHtml(annotation.note)}"` : "";
-  return `<article class="brief-item ${annotation ? "has-annotation" : ""}"><div><span class="brief-state ${isUrgent ? "urgent" : ""}${annotationClass}"${annotationNote}>${escapeHtml(isUrgent ? "优先处理" : task.state.label)}</span><h4 title="${escapeHtml(task.title)}">${escapeHtml(taskDisplayTitle(task))}</h4><p>${escapeHtml(task.action)}</p></div><div class="brief-item-meta"><time>${escapeHtml(task.due ? formatDate(task.due, true) : "暂无截止")}</time><span>${escapeHtml(task.reason)}</span>${link}</div></article>`;
+  const state = task.state?.key === "waiting" ? (newsLanguage === "en" ? "Waiting" : "等待他人") : task.state?.key === "decision" ? (newsLanguage === "en" ? "Follow up" : "待推进") : newsLanguage === "en" ? "In progress" : "进行中";
+  return `<article class="brief-item ${annotation ? "has-annotation" : ""}"><div><span class="brief-state ${isUrgent ? "urgent" : ""}${annotationClass}"${annotationNote}>${escapeHtml(isUrgent ? t("priorityAction") : state)}</span><h4 title="${escapeHtml(task.title)}">${escapeHtml(taskDisplayTitle(task))}</h4><p>${escapeHtml(task.action)}</p></div><div class="brief-item-meta"><time>${escapeHtml(task.due ? formatDate(task.due, true) : t("noDate"))}</time><span>${escapeHtml(task.reason)}</span>${link}</div></article>`;
 }
 
 // Render an upcoming meeting with its preparation prompt and related work.
 function dailyBriefMeetingItem(item) {
-  const related = item.relatedTask ? ` · 关联：${taskDisplayTitle(item.relatedTask)}` : "";
+  const related = item.relatedTask ? ` · ${t("related")}${taskDisplayTitle(item.relatedTask)}` : "";
   const link = item.link ? `<a class="brief-open" href="${escapeHtml(item.link)}" target="_blank" rel="noreferrer" aria-label="在飞书中打开日程：${escapeHtml(item.title)}" title="在飞书中打开"><i data-lucide="arrow-up-right"></i></a>` : "";
-  return `<article class="brief-item"><div><span class="brief-state">需准备</span><h4 title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4><p>${escapeHtml(item.preparation)}</p><span class="meeting-context">${escapeHtml(related)}</span></div><div class="brief-item-meta"><time>${escapeHtml(formatDate(item.start, true))}</time>${link}</div></article>`;
+  return `<article class="brief-item"><div><span class="brief-state">${t("prepare")}</span><h4 title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4><p>${escapeHtml(item.preparation)}</p><span class="meeting-context">${escapeHtml(related)}</span></div><div class="brief-item-meta"><time>${escapeHtml(formatMeetingTime(item.start))}</time>${link}</div></article>`;
 }
 
 // Render one message that requires a human decision before it becomes a task.
 function dailyBriefReplyItem(message) {
-  return `<article class="reply-item"><div class="reply-item-head"><div><span class="brief-state">${escapeHtml(message.reason)}</span><h4 title="${escapeHtml(message.chat)}">${escapeHtml(message.chat || "飞书消息")}</h4></div><span>${escapeHtml(message.sender || "未知发送人")}</span></div><p>${escapeHtml(message.preview)}</p><div class="reply-actions"><a class="reply-action" href="${escapeHtml(message.link || "#")}" ${message.link ? "target=\"_blank\" rel=\"noreferrer\"" : ""}>查看消息</a><button class="reply-action" data-add-message-task="${escapeHtml(message.id)}" type="button">加入任务</button><button class="reply-action dismiss" data-dismiss-message="${escapeHtml(message.id)}" type="button">忽略</button></div></article>`;
+  return `<article class="reply-item"><div class="reply-item-head"><div><span class="brief-state">${escapeHtml(message.reason)}</span><h4 title="${escapeHtml(message.chat)}">${escapeHtml(message.chat || t("messageFrom"))}</h4></div><span>${escapeHtml(message.sender || t("unknownSender"))}</span></div><p>${escapeHtml(message.preview)}</p><div class="reply-actions"><a class="reply-action" href="${escapeHtml(message.link || "#")}" ${message.link ? "target=\"_blank\" rel=\"noreferrer\"" : ""}>${t("viewMessage")}</a><button class="reply-action" data-add-message-task="${escapeHtml(message.id)}" type="button">${t("addTask")}</button><button class="reply-action dismiss" data-dismiss-message="${escapeHtml(message.id)}" type="button">${t("dismiss")}</button></div></article>`;
 }
 
 // Render the action-led daily brief from the current read-only context snapshot.
@@ -184,19 +272,26 @@ function renderDailyBrief() {
   if (!window.DailyBrief) return;
   const brief = window.DailyBrief.build(contextData, { ignoredMessageIds: [...dismissedBriefMessages] });
   const updated = document.querySelector("#daily-brief-updated");
-  updated.textContent = brief.generatedAt ? `更新于 ${formatDate(brief.generatedAt, true)}` : "等待同步";
+  updated.textContent = brief.generatedAt ? `${t("updatedAt")}${formatDate(brief.generatedAt, true)}` : t("waitingSync");
   const isQuiet = !brief.priorities.length && !brief.meetings.length && !brief.reply.length && !brief.risks.length;
   document.querySelector(".daily-brief").classList.toggle("is-quiet", isQuiet);
-  const summary = [[brief.summary.priorities, "项优先推进"], [brief.summary.meetings, "个今日会议"], [brief.summary.reply, "条待确认消息"], [brief.summary.waiting, "项外部依赖"]];
-  document.querySelector("#daily-brief-summary").innerHTML = isQuiet ? "<div class=\"brief-calm-summary\"><i data-lucide=\"circle-check-big\"></i><span>今天没有需要立即处理的事项</span></div>" : summary.map(([value, label]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join("");
-  const syncCue = !brief.generatedAt ? "<p class=\"brief-empty sync-guidance\"><span class=\"ann ann-s ann-blue\" data-note=\"先同步工作上下文\">等待同步</span><br />同步后会在这里显示今日优先事项。</p>" : "<p class=\"brief-empty\">今天没有需要推进的工作。</p>";
-  document.querySelector("#daily-priority-list").innerHTML = brief.priorities.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "amber", note: "从这里开始" } : null)).join("") || syncCue;
-  document.querySelector("#daily-meeting-list").innerHTML = brief.meetings.map(dailyBriefMeetingItem).join("") || "<p class=\"brief-empty\">未来 48 小时没有需要准备的会议。</p>";
-  document.querySelector("#daily-reply-list").innerHTML = brief.reply.map(dailyBriefReplyItem).join("") || "<p class=\"brief-empty\">没有需要人工确认的消息。</p>";
-  document.querySelector("#daily-risk-list").innerHTML = brief.risks.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "red", note: "先确认依赖" } : null)).join("") || "<p class=\"brief-empty\">当前没有明显的截止或依赖风险。</p>";
-  const closed = brief.closed.length ? brief.closed.map((task) => `<div><i data-lucide="check-circle-2"></i><span>${escapeHtml(taskDisplayTitle(task))}</span></div>`).join("") : "<div><i data-lucide=\"circle\"></i><span>完成事项会在下次同步后显示在这里。</span></div>";
-  const followUp = brief.risks[0] ? `<div><i class="risk-icon" data-lucide="triangle-alert"></i><span>下一项风险：${escapeHtml(taskDisplayTitle(brief.risks[0]))}</span></div>` : `<div><i data-lucide="calendar-arrow-right"></i><span>明日已有 ${brief.tomorrowCount} 项任务或日程需要关注。</span></div>`;
-  document.querySelector("#daily-closeout").innerHTML = `<div class="daily-closeout-heading"><div><p class="eyebrow">日终闭环</p><h3>完成、未完成原因与明日关注</h3><p>系统只呈现同步到飞书的结果，不会自行判断任务是否完成。</p></div></div><div class="closeout-list">${closed}${followUp}</div>`;
+  const summary = [[brief.summary.priorities, t("priorityCount")], [brief.summary.meetings, t("meetingCount")], [brief.summary.reply, t("replyCount")], [brief.summary.waiting, t("waitingCount")]];
+  document.querySelector("#daily-brief-summary").innerHTML = isQuiet ? `<div class="brief-calm-summary"><i data-lucide="circle-check-big"></i><span>${t("quietDay")}</span></div>` : summary.map(([value, label]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join("");
+  const syncCue = !brief.generatedAt ? `<p class="brief-empty sync-guidance"><span class="ann ann-s ann-blue" data-note="${t("startHere")}">${t("waitingSync")}</span><br />${t("waitingSync")}</p>` : `<p class="brief-empty">${t("noPriority")}</p>`;
+  document.querySelector("#daily-priority-list").innerHTML = brief.priorities.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "amber", note: t("startHere") } : null)).join("") || syncCue;
+  document.querySelector("#daily-meeting-list").innerHTML = brief.meetings.map(dailyBriefMeetingItem).join("") || `<p class="brief-empty">${t("noMeeting")}</p>`;
+  document.querySelector("#daily-reply-list").innerHTML = brief.reply.map(dailyBriefReplyItem).join("") || `<p class="brief-empty">${t("noReply")}</p>`;
+  document.querySelector("#daily-risk-list").innerHTML = brief.risks.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "red", note: t("checkDependency") } : null)).join("") || `<p class="brief-empty">${t("noRisk")}</p>`;
+  const closeout = document.querySelector("#daily-closeout");
+  const hasCloseout = brief.closed.length > 0 || brief.risks.length > 0;
+  closeout.hidden = !hasCloseout;
+  if (!hasCloseout) {
+    closeout.innerHTML = "";
+    return;
+  }
+  const closed = brief.closed.map((task) => `<div><i data-lucide="check-circle-2"></i><span>${escapeHtml(taskDisplayTitle(task))}</span></div>`).join("");
+  const followUp = brief.risks[0] ? `<div><i class="risk-icon" data-lucide="triangle-alert"></i><span>${t("nextRisk")}${escapeHtml(taskDisplayTitle(brief.risks[0]))}</span></div>` : "";
+  closeout.innerHTML = `<div class="daily-closeout-heading"><div><p class="eyebrow">${t("closeout")}</p><h3>${t("closeoutTitle")}</h3><p>${t("closeoutCopy")}</p></div></div><div class="closeout-list">${closed}${followUp}</div>`;
 }
 
 // Render the short priority list on the overview page.
@@ -211,19 +306,33 @@ function renderPriorities() {
 // Render all local tasks using the selected filter.
 function renderAllTasks() {
   const tasks = visibleTasks();
-  const filtered = tasks.filter((task) => taskFilter === "all" || (taskFilter === "open" ? task.status !== "done" : task.status === "done"));
-  document.querySelector('[data-task-filter="all"]').textContent = `全部 ${tasks.length}`;
-  document.querySelector('[data-task-filter="open"]').textContent = `未完成 ${tasks.filter((task) => task.status !== "done").length}`;
-  document.querySelector('[data-task-filter="done"]').textContent = `已完成 ${tasks.filter((task) => task.status === "done").length}`;
-  document.querySelector("#task-list-count").textContent = `${filtered.length} 项`;
-  document.querySelector("#all-task-list").innerHTML = filtered.map((task) => taskRow(task, task.source !== "lark-task" && task.source !== "feishu-project")).join("") || "<div class=\"empty-state\"><i data-lucide=\"inbox\"></i><span>这里还没有相关任务。</span></div>";
+  const filtered = tasks.filter((task) => (taskFilter === "all" || (taskFilter === "open" ? task.status !== "done" : task.status === "done")) && (priorityFilter === "all" || task.priority === priorityFilter));
+  document.querySelector('[data-task-filter="all"]').textContent = `${t("all")} ${tasks.length}`;
+  document.querySelector('[data-task-filter="open"]').textContent = `${t("open")} ${tasks.filter((task) => task.status !== "done").length}`;
+  document.querySelector('[data-task-filter="done"]').textContent = `${t("done")} ${tasks.filter((task) => task.status === "done").length}`;
+  document.querySelector('[data-priority-filter="all"]').textContent = t("allPriorities");
+  ["high", "medium", "low"].forEach((priority) => { document.querySelector(`[data-priority-filter="${priority}"]`).textContent = t(priority); });
+  document.querySelector("#task-list-count").textContent = newsLanguage === "en" ? `${filtered.length} items` : `${filtered.length} 项`;
+  document.querySelector("#all-task-list").innerHTML = filtered.map((task) => taskRow(task, task.source !== "lark-task" && task.source !== "feishu-project")).join("") || `<div class="empty-state"><i data-lucide="inbox"></i><span>${t("noTasks")}</span></div>`;
 }
 
 // Render Project work as business themes rather than the broad source project name.
 function renderProjects() {
-  const tasks = contextData.feishu?.tasks || [];
-  const groups = clusterProjectTasks(tasks);
-  document.querySelector("#project-cards").innerHTML = groups.map((group) => `<article class="project-card" style="--project-color:${group.color}"><div class="project-card-top"><span class="status-chip pale">飞书 Project</span><span class="project-percent">${group.progress}%</span></div><h3>${escapeHtml(group.name)}</h3><p>${group.active} 项进行中 · ${group.completed} 项已完成</p><div class="progress-line"><span style="width:${group.progress}%"></span></div><div class="project-task-preview"><span title="${escapeHtml(group.preview?.title || "")}">当前：${escapeHtml(taskDisplayTitle(group.preview || {}))}</span><span>${escapeHtml(group.preview?.nextStep || "等待下一步")}</span></div></article>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"folder-open\"></i><span>暂无同步的飞书 Project。</span></div>";
+  const groups = currentWorkGroups();
+  document.querySelector("#project-cards").innerHTML = groups.map((group) => `<button class="project-card" data-project-group="${escapeHtml(group.name)}" style="--project-color:${group.color}" type="button" aria-label="${escapeHtml(t("projectDetails"))}：${escapeHtml(group.name)}"><div class="project-card-top"><span class="status-chip pale">${t("projectSource")}</span><span class="project-percent">${group.progress}%</span></div><h3>${escapeHtml(group.name)}</h3><p>${group.active} ${t("active")} · ${group.completed} ${t("completed")}</p><div class="progress-line"><span style="width:${group.progress}%"></span></div><div class="project-task-preview"><span title="${escapeHtml(group.preview?.title || "")}">${t("current")}${escapeHtml(taskDisplayTitle(group.preview || {}))}</span><span>${escapeHtml(group.preview?.nextStep || t("waitingSync"))}</span></div></button>`).join("") || `<div class="empty-state"><i data-lucide="folder-open"></i><span>${t("noCurrentProject")}</span></div>`;
+}
+
+// Open a detailed progress view for one current-work group.
+function openProjectDialog(name) {
+  const group = currentWorkGroups().find((item) => item.name === name);
+  if (!group) return;
+  const dialog = document.querySelector("#project-dialog");
+  document.querySelector("#project-dialog-kicker").textContent = t("projectProgress");
+  document.querySelector("#project-dialog-title").textContent = group.name;
+  const tasks = group.tasks || [];
+  document.querySelector("#project-dialog-content").innerHTML = `<div class="project-dialog-summary"><div><strong>${group.progress}%</strong><span>${t("projectProgress")}</span></div><div><strong>${group.active}</strong><span>${t("projectItems")}</span></div></div><div class="project-detail-list">${tasks.map((task) => `<article class="project-detail-item"><div class="project-detail-top"><div><h3>${escapeHtml(taskDisplayTitle(task))}</h3><p>${escapeHtml(task.project || t("noProject"))}</p></div><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${t(task.priority)}</span></div><div class="project-detail-progress"><span><i style="width:${taskProgress(task)}%"></i></span><strong>${taskProgress(task)}%</strong></div><p class="project-detail-next">${t("projectNextStep")}${escapeHtml(task.nextStep || task.action || t("waitingSync"))}</p></article>`).join("") || `<div class="empty-state"><i data-lucide="folder-open"></i><span>${t("noTasks")}</span></div>`}</div>`;
+  dialog.showModal();
+  lucide.createIcons();
 }
 
 // Render the compact weekly focus chart.
@@ -237,11 +346,11 @@ function renderRhythm() {
 
 // Render project tasks grouped into planning columns.
 function renderKanban() {
-  const columns = [["todo", "计划中"], ["progress", "进行中"], ["review", "待复盘"], ["done", "已完成"]];
+  const columns = [["todo", t("todo")], ["progress", t("progress")], ["review", t("review")], ["done", t("done")]];
   document.querySelector("#kanban-board").innerHTML = columns.map(([status, label]) => {
     const order = { high: 0, medium: 1, low: 2 };
     const tasks = visibleTasks().filter((task) => task.status === status).sort((left, right) => order[left.priority] - order[right.priority] || new Date(left.dueAt || 0) - new Date(right.dueAt || 0));
-    return `<section class="kanban-column"><div class="kanban-heading"><span>${label}</span><span class="kanban-count">${tasks.length}</span></div>${tasks.map((task) => `<article class="kanban-card" style="--task-color:${priorityColor(task.priority)}"><h3 title="${escapeHtml(task.title)}">${escapeHtml(task.displayTitle)}</h3><p>${escapeHtml(task.project || "未归类")} · ${escapeHtml(formatDate(task.dueAt || task.due))}</p><div class="kanban-footer"><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${task.priority === "high" ? "高优先级" : task.priority === "medium" ? "中优先级" : "低优先级"}</span>${task.source === "lark-task" || task.source === "feishu-project" ? "<span class=\"status-chip pale\">只读同步</span>" : `<select class="status-select" data-status-task="${escapeHtml(task.id)}" aria-label="修改任务状态：${escapeHtml(task.title)}"><option value="todo" ${task.status === "todo" ? "selected" : ""}>计划中</option><option value="progress" ${task.status === "progress" ? "selected" : ""}>进行中</option><option value="review" ${task.status === "review" ? "selected" : ""}>待复盘</option><option value="done" ${task.status === "done" ? "selected" : ""}>已完成</option></select>`}</div></article>`).join("") || "<p class=\"column-empty\">暂无任务</p>"}</section>`;
+    return `<section class="kanban-column"><div class="kanban-heading"><span>${label}</span><span class="kanban-count">${tasks.length}</span></div>${tasks.map((task) => `<article class="kanban-card" style="--task-color:${priorityColor(task.priority)}"><h3 title="${escapeHtml(task.title)}">${escapeHtml(task.displayTitle)}</h3><p>${escapeHtml(task.project || t("noProject"))} · ${escapeHtml(formatDate(task.dueAt || task.due))}</p><div class="kanban-footer"><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${t(task.priority)}</span>${task.source === "lark-task" || task.source === "feishu-project" ? `<span class="status-chip pale" title="${escapeHtml(t("feishuSyncedHint"))}">${t("feishuSynced")}</span>` : `<select class="status-select" data-status-task="${escapeHtml(task.id)}" aria-label="${escapeHtml(task.title)}"><option value="todo" ${task.status === "todo" ? "selected" : ""}>${t("todo")}</option><option value="progress" ${task.status === "progress" ? "selected" : ""}>${t("progress")}</option><option value="review" ${task.status === "review" ? "selected" : ""}>${t("review")}</option><option value="done" ${task.status === "done" ? "selected" : ""}>${t("done")}</option></select>`}</div></article>`).join("") || `<p class="column-empty">${t("noColumnTasks")}</p>`}</section>`;
   }).join("");
 }
 
@@ -254,7 +363,7 @@ function renderFocusOptions() {
   document.querySelector("#focus-task-options").innerHTML = pageTasks.map((task) => `<button class="focus-choice ${task.id === data.selectedTaskId ? "active" : ""}" data-focus-task="${escapeHtml(task.id)}" type="button" title="${escapeHtml(task.title)}"><span class="priority-dot" style="--task-color:${priorityColor(task.priority)}"></span><span><strong class="${task.id === data.selectedTaskId ? "ann ann-green" : ""}">${escapeHtml(task.displayTitle)}</strong><small>${escapeHtml(task.project || "未归类")}</small></span></button>`).join("") || "<div class=\"empty-state\"><i data-lucide=\"check-circle-2\"></i><span>先创建一项未完成任务。</span></div>";
   document.querySelector("#focus-pagination").innerHTML = pages > 1 ? `<button class="icon-button" data-focus-page="${focusPage - 1}" ${focusPage === 0 ? "disabled" : ""} type="button" aria-label="上一页" title="上一页"><i data-lucide="arrow-left"></i></button><span>${focusPage + 1} / ${pages}</span><button class="icon-button" data-focus-page="${focusPage + 1}" ${focusPage === pages - 1 ? "disabled" : ""} type="button" aria-label="下一页" title="下一页"><i data-lucide="arrow-right"></i></button>` : "";
   const selected = visibleTasks().find((task) => task.id === data.selectedTaskId);
-  document.querySelector("#timer-task").textContent = selected ? selected.title : "选择一项任务开始。";
+  document.querySelector("#timer-task").textContent = selected ? selected.title : t("selectTask");
 }
 
 // Render source connection cards from the local context snapshot.
@@ -288,22 +397,23 @@ function renderWorkPlan() {
 
 // Render the provider states in the news sidebar.
 function renderProviders() {
-  const providers = [["aihot", "AI HOT", "中文 AI 精选"], ["builders", "Follow Builders", "AI Builder 观点"], ["worldmonitor", "World Monitor", "全球情报"]];
+  const providers = [["aihot", "AI HOT", t("providerAihot")], ["builders", "Follow Builders", t("providerBuilders")], ["worldmonitor", "World Monitor", t("providerWorld")], ["finance", "Finance Briefs", t("providerFinance")], ["crypto", "Crypto Wire", t("providerCrypto")]];
   document.querySelector("#provider-list").innerHTML = providers.map(([key, name, label]) => {
     const status = providerStatuses[key] || { state: "idle", detail: "手动刷新后加载" };
-    return `<div class="provider-row"><span class="provider-icon ${key}"><i data-lucide="${key === "worldmonitor" ? "globe-2" : key === "builders" ? "users" : "sparkles"}"></i></span><div><strong>${name}</strong><small>${label}</small></div><span class="provider-state ${status.state}">${escapeHtml(status.detail)}</span></div>`;
+    const icon = key === "worldmonitor" ? "globe-2" : key === "builders" ? "users" : key === "finance" ? "landmark" : key === "crypto" ? "blocks" : "sparkles";
+    return `<div class="provider-row"><span class="provider-icon ${key}"><i data-lucide="${icon}"></i></span><div><strong>${name}</strong><small>${label}</small></div><span class="provider-state ${status.state}">${escapeHtml(status.detail)}</span></div>`;
   }).join("");
 }
 
 // Classify every story by market, topic, and editorial importance instead of its feed source.
 function editorialMeta(item) {
   const text = `${item.title || ""} ${item.summary || ""}`.toLowerCase();
-  const market = /中国|北京|上海|小红书|字节|阿里|腾讯|qwen|kimi/.test(text) ? "中国" : /英国|英格兰|欧洲|德国|法国|eu\b|uk\b/.test(text) ? "欧洲" : /美国|openai|google|anthropic|microsoft|amazon|meta\b/.test(text) ? "美国" : /印度|日本|韩国|澳大利亚|新西兰|亚太/.test(text) ? "亚太" : "全球";
-  const topic = /hacking|hack|安全|漏洞|攻击|guardrail|防护/.test(text) ? "安全" : /政策|监管|business rates|政府|议会|法案|law|regulation/.test(text) ? "市场与政策" : /投资|融资|估值|收购|营收|公司|business|funding|valuation|investment/.test(text) ? "产品与公司" : /builder|开发者|github|开源|open source|zig|bun|代码|runtime/.test(text) ? "开发者生态" : "AI 与模型";
-  const score = (item.source === "aihot" ? 3 : item.source === "worldmonitor" ? 2.7 : 1.8) + (/发布|开源|政策|投资|安全|launch|open|policy|attack/.test(text) ? 1 : 0) + (text.length > 120 ? .35 : 0);
+  const marketKey = item.source === "crypto" ? "Crypto" : item.source === "finance" ? "China" : /中国|北京|上海|小红书|字节|阿里|腾讯|qwen|kimi/.test(text) ? "China" : /英国|英格兰|欧洲|德国|法国|eu\b|uk\b/.test(text) ? "Europe" : /美国|openai|google|anthropic|microsoft|amazon|meta\b/.test(text) ? "Us" : /印度|日本|韩国|澳大利亚|新西兰|亚太/.test(text) ? "Apac" : "Global";
+  const topicKey = item.source === "finance" ? "Finance" : item.source === "crypto" ? "Crypto" : /hacking|hack|安全|漏洞|攻击|guardrail|防护/.test(text) ? "Security" : /政策|监管|business rates|政府|议会|法案|law|regulation/.test(text) ? "Market" : /投资|融资|估值|收购|营收|公司|business|funding|valuation|investment/.test(text) ? "Product" : /builder|开发者|github|开源|open source|zig|bun|代码|runtime/.test(text) ? "Builders" : /人工智能|模型|machine learning|llm|chatgpt|openai|anthropic|gemini|qwen|kimi|\bai\b/.test(text) ? "Ai" : "Market";
+  const score = (item.source === "aihot" ? 3 : item.source === "worldmonitor" ? 2.7 : item.source === "crypto" ? 2.6 : item.source === "finance" ? 2.5 : 1.8) + (/发布|开源|政策|投资|安全|launch|open|policy|attack|监管|通胀|美联储|比特币|bitcoin|ethereum/.test(text) ? 1 : 0) + (text.length > 120 ? .35 : 0);
   const importance = score >= 3.7 ? "重要" : score >= 2.5 ? "关注" : "观察";
-  const category = topic === "AI 与模型" ? "ai" : topic === "市场与政策" ? "market" : topic === "产品与公司" ? "product" : topic === "开发者生态" ? "builders" : "security";
-  return { market, topic, importance, category, score };
+  const category = item.source === "finance" || item.source === "crypto" ? "financeCrypto" : item.source === "aihot" || item.source === "builders" || topicKey === "Ai" || topicKey === "Builders" ? "aiBuilders" : topicKey === "Product" ? "product" : "world";
+  return { market: t(`market${marketKey}`), topic: t(`topic${topicKey}`), importance: newsLanguage === "en" ? (score >= 3.7 ? "Major" : score >= 2.5 ? "Watch" : "Monitor") : importance, category, score };
 }
 
 // Rank stories by editorial importance, source reliability, and freshness.
@@ -330,16 +440,22 @@ function newspaperStory(item, variant = "brief") {
   const meta = editorialMeta(item);
   const shape = storyWeight(item) > 4.2 ? "story-tall" : storyWeight(item) < 2.3 ? "story-compact" : "story-standard";
   const tag = variant === "lead" ? "头条" : variant === "secondary" ? "重点" : "简报";
-  return `<article class="news-story ${variant} ${shape}"><div class="news-story-kicker"><span class="source-label ${escapeHtml(item.source)}">${escapeHtml(item.sourceLabel || item.source)}</span><span>${tag}</span></div><div class="news-story-context"><span>${escapeHtml(meta.topic)}</span><span>${escapeHtml(meta.market)}</span><strong>${escapeHtml(meta.importance)}</strong></div><h3>${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(title || fallbackTitle)}</a>` : escapeHtml(title || fallbackTitle)}</h3><p>${escapeHtml(summary || fallbackSummary)}</p><footer><span>${escapeHtml(item.author || item.attribution || (newsLanguage === "en" ? "Public source" : "公开来源"))}</span><time>${escapeHtml(formatDate(item.publishedAt, true))}</time>${item.url ? `<a class="news-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer" aria-label="打开原文" title="打开原文"><i data-lucide="external-link"></i></a>` : ""}</footer></article>`;
+  const targetUrl = item.url || item.sourceUrl;
+  const linkLabel = item.url ? (newsLanguage === "en" ? "Open article" : "打开原文") : (newsLanguage === "en" ? "Open source" : "打开快讯来源");
+  return `<article class="news-story ${variant} ${shape}"><div class="news-story-kicker"><span class="source-label ${escapeHtml(item.source)}">${escapeHtml(item.sourceLabel || item.source)}</span><span>${tag}</span></div><div class="news-story-context"><span>${escapeHtml(meta.topic)}</span><span>${escapeHtml(meta.market)}</span><strong>${escapeHtml(meta.importance)}</strong></div><h3>${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(title || fallbackTitle)}</a>` : escapeHtml(title || fallbackTitle)}</h3><p>${escapeHtml(summary || fallbackSummary)}</p><footer><span>${escapeHtml(item.author || item.attribution || (newsLanguage === "en" ? "Public source" : "公开来源"))}</span><time>${escapeHtml(formatDate(item.publishedAt, true))}</time>${targetUrl ? `<a class="news-link" href="${escapeHtml(targetUrl)}" target="_blank" rel="noreferrer" aria-label="${linkLabel}" title="${linkLabel}"><i data-lucide="external-link"></i></a>` : ""}</footer></article>`;
 }
 
-// Distribute supporting stories by estimated length so each column grows independently.
+// Distribute every story by estimated length so the lead column does not leave a blank tail.
 function renderNewspaperColumns(pageItems) {
-  const lead = pageItems[0];
-  const columns = [[], []];
-  const heights = [0, 0];
-  pageItems.slice(1).forEach((item) => { const target = heights[0] <= heights[1] ? 0 : 1; columns[target].push(item); heights[target] += storyWeight(item); });
-  return `<div class="newspaper-grid"><div class="newspaper-lead-column">${newspaperStory(lead, "lead")}</div>${columns.map((column) => `<div class="newspaper-column">${column.map((item) => newspaperStory(item, "secondary")).join("")}</div>`).join("")}</div>`;
+  const columns = [[], [], []];
+  const heights = [0, 0, 0];
+  pageItems.forEach((item, index) => {
+    // Seed every column and place one supporting story under the lead before balancing by content length.
+    const target = index < 4 ? [0, 1, 2, 0][index] : heights.indexOf(Math.min(...heights));
+    columns[target].push({ item, variant: index === 0 ? "lead" : "secondary" });
+    heights[target] += storyWeight(item);
+  });
+  return `<div class="newspaper-grid">${columns.map((column, index) => `<div class="${index === 0 ? "newspaper-lead-column" : "newspaper-column"}">${column.map(({ item, variant }) => newspaperStory(item, variant)).join("")}</div>`).join("")}</div>`;
 }
 
 // Render the current newspaper page with independent columns and no source-based layout.
@@ -359,7 +475,47 @@ function renderNews() {
 }
 
 // Switch the displayed language without fetching the feeds again.
-function setNewsLanguage(language) { newsLanguage = language === "en" ? "en" : "zh"; localStorage.setItem("jessboard-language", newsLanguage); document.documentElement.lang = newsLanguage === "en" ? "en" : "zh-CN"; document.querySelectorAll("[data-news-language]").forEach((tab) => tab.classList.toggle("active", tab.dataset.newsLanguage === newsLanguage)); renderNews(); lucide.createIcons(); }
+function renderInterfaceLanguage() {
+  const copy = interfaceCopy[newsLanguage];
+  document.body.dataset.language = newsLanguage;
+  document.querySelectorAll("[data-i18n]").forEach((element) => { element.textContent = copy[element.dataset.i18n] || element.textContent; });
+  document.querySelectorAll("[data-news-language]").forEach((tab) => { const active = tab.dataset.newsLanguage === newsLanguage; tab.classList.toggle("active", active); tab.setAttribute("aria-pressed", String(active)); });
+  document.querySelector("#news-masthead-title").textContent = newsLanguage === "en" ? "JessDaily" : "Jess日报";
+  document.querySelectorAll("[data-news-filter]").forEach((tab) => { const key = `newsFilter${tab.dataset.newsFilter[0].toUpperCase()}${tab.dataset.newsFilter.slice(1)}`; tab.textContent = t(key); });
+  updateThemeControl(copy);
+}
+
+// Update the theme button to describe the change it will make.
+function updateThemeControl(copy = null) {
+  const button = document.querySelector("#theme-toggle");
+  if (!button) return;
+  const labels = copy || (newsLanguage === "en" ? { darkMode: "Switch to dark mode", lightMode: "Switch to light mode" } : { darkMode: "切换深色模式", lightMode: "切换明亮模式" });
+  const isDark = document.body.classList.contains("dark");
+  const label = isDark ? labels.lightMode : labels.darkMode;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.innerHTML = `<i data-lucide="${isDark ? "sun" : "moon"}"></i>`;
+}
+
+// Switch the visible application language and refresh language-sensitive content.
+function setNewsLanguage(language) {
+  newsLanguage = language === "en" ? "en" : "zh";
+  localStorage.setItem("jessboard-language", newsLanguage);
+  document.documentElement.lang = newsLanguage === "en" ? "en" : "zh-CN";
+  renderInterfaceLanguage();
+  renderToday();
+  renderApp();
+  renderNews();
+  lucide.createIcons();
+}
+
+// Apply and persist the selected visual theme.
+function applyTheme(theme) {
+  document.body.classList.toggle("dark", theme === "dark");
+  localStorage.setItem("jessboard-theme", theme);
+  updateThemeControl();
+  lucide.createIcons();
+}
 
 // Convert Open-Meteo weather codes into short Chinese labels for the masthead.
 function weatherLabel(code) { if (code === 0) return "晴"; if ([1, 2, 3].includes(code)) return "多云"; if ([45, 48].includes(code)) return "雾"; if ([51, 53, 55, 56, 57].includes(code)) return "毛毛雨"; if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "有雨"; if ([71, 73, 75, 77, 85, 86].includes(code)) return "有雪"; if ([95, 96, 99].includes(code)) return "雷雨"; return "天气"; }
@@ -400,6 +556,7 @@ async function refreshContext() {
     if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     contextData = payload;
     renderApp();
+    if (payload.refresh?.partial) document.querySelector("#daily-brief-updated").textContent = newsLanguage === "en" ? "Partial refresh: showing the last successful snapshot" : "部分同步完成：正在显示上次成功的快照";
   } catch (error) {
     document.querySelector("#daily-brief-updated").textContent = `更新失败：${error.message}`;
   } finally {
@@ -507,11 +664,39 @@ async function loadDevMetrics() {
   }
 }
 
-// Fetch all three news providers through the local service.
+// Restore the last successful edition before the next network refresh completes.
+function restoreNewsSnapshot() {
+  try {
+    const snapshot = JSON.parse(localStorage.getItem(newsSnapshotKey) || "null");
+    if (!snapshot || !Array.isArray(snapshot.items)) return false;
+    newsItems = snapshot.items;
+    providerStatuses = snapshot.providers || {};
+    document.querySelector("#news-updated").textContent = snapshot.fetchedAt ? `上次更新于 ${formatDate(snapshot.fetchedAt, true)}` : "显示上次成功的资讯";
+    return newsItems.length > 0;
+  } catch {
+    localStorage.removeItem(newsSnapshotKey);
+    return false;
+  }
+}
+
+// Keep only successful, public-news results so a later failed refresh cannot erase the edition.
+function saveNewsSnapshot(payload) {
+  try {
+    localStorage.setItem(newsSnapshotKey, JSON.stringify({ items: payload.items || [], providers: payload.providers || {}, fetchedAt: payload.fetchedAt || new Date().toISOString() }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Fetch all configured news providers through the local service.
 async function refreshNews() {
+  if (newsLoading) return;
+  newsLoading = true;
   const button = document.querySelector("#refresh-news");
   button.disabled = true;
   button.innerHTML = "<i data-lucide=\"loader-circle\" class=\"spin\"></i>刷新中";
+  document.querySelector("#news-updated").textContent = newsItems.length ? "正在更新本期资讯..." : "正在加载本期资讯...";
   lucide.createIcons();
   try {
     const response = await fetch("/api/news");
@@ -520,12 +705,16 @@ async function refreshNews() {
     newsItems = payload.items || [];
     newsPage = 0;
     providerStatuses = payload.providers || {};
+    saveNewsSnapshot(payload);
     document.querySelector("#news-updated").textContent = payload.fetchedAt ? `更新于 ${formatDate(payload.fetchedAt, true)}` : "已刷新";
   } catch (error) {
-    newsItems = [];
-    providerStatuses = { aihot: { state: "error", detail: "服务未启动" }, builders: { state: "error", detail: "服务未启动" }, worldmonitor: { state: "error", detail: "服务未启动" } };
-    document.querySelector("#news-updated").textContent = "请先启动本机服务";
+    if (newsItems.length) document.querySelector("#news-updated").textContent = "刷新失败，正在显示上次成功的资讯";
+    else {
+      providerStatuses = { aihot: { state: "error", detail: "服务未启动" }, builders: { state: "error", detail: "服务未启动" }, worldmonitor: { state: "error", detail: "服务未启动" }, finance: { state: "error", detail: "服务未启动" }, crypto: { state: "error", detail: "服务未启动" } };
+      document.querySelector("#news-updated").textContent = "请先启动本机服务";
+    }
   } finally {
+    newsLoading = false;
     button.disabled = false;
     button.innerHTML = "<i data-lucide=\"refresh-cw\"></i>手动刷新";
     renderNews();
@@ -617,7 +806,7 @@ function toggleSidebar() {
 // Wire shared controls, filters, navigation, and dialogs.
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const toggle = event.target.closest("[data-toggle-task]"); const deletion = event.target.closest("[data-delete-task]"); const messageTask = event.target.closest("[data-add-message-task]"); const messageDismiss = event.target.closest("[data-dismiss-message]"); const choice = event.target.closest("[data-focus-task]"); const navigation = event.target.closest("[data-view], [data-go-to]"); const taskTab = event.target.closest("[data-task-filter]"); const newsTab = event.target.closest("[data-news-filter]"); const languageTab = event.target.closest("[data-news-language]"); const sidebarToggle = event.target.closest("#sidebar-toggle"); const focusPager = event.target.closest("[data-focus-page]"); const localPager = event.target.closest("[data-local-page]");
+    const toggle = event.target.closest("[data-toggle-task]"); const deletion = event.target.closest("[data-delete-task]"); const messageTask = event.target.closest("[data-add-message-task]"); const messageDismiss = event.target.closest("[data-dismiss-message]"); const choice = event.target.closest("[data-focus-task]"); const navigation = event.target.closest("[data-view], [data-go-to]"); const taskTab = event.target.closest("[data-task-filter]"); const priorityTab = event.target.closest("[data-priority-filter]"); const projectCard = event.target.closest("[data-project-group]"); const newsTab = event.target.closest("[data-news-filter]"); const languageTab = event.target.closest("[data-news-language]"); const sidebarToggle = event.target.closest("#sidebar-toggle"); const focusPager = event.target.closest("[data-focus-page]"); const localPager = event.target.closest("[data-local-page]");
     if (toggle) toggleTask(toggle.dataset.toggleTask);
     if (deletion) deleteTask(deletion.dataset.deleteTask);
     if (messageTask) addBriefMessageTask(messageTask.dataset.addMessageTask);
@@ -625,6 +814,8 @@ function bindEvents() {
     if (choice) { data.selectedTaskId = choice.dataset.focusTask; saveData(); renderFocusOptions(); lucide.createIcons(); }
     if (navigation) setView(navigation.dataset.view || navigation.dataset.goTo);
     if (taskTab) { taskFilter = taskTab.dataset.taskFilter; document.querySelectorAll("[data-task-filter]").forEach((tab) => tab.classList.toggle("active", tab === taskTab)); renderAllTasks(); lucide.createIcons(); }
+    if (priorityTab) { priorityFilter = priorityTab.dataset.priorityFilter; document.querySelectorAll("[data-priority-filter]").forEach((tab) => tab.classList.toggle("active", tab === priorityTab)); renderAllTasks(); lucide.createIcons(); }
+    if (projectCard) openProjectDialog(projectCard.dataset.projectGroup);
     if (newsTab) { newsFilter = newsTab.dataset.newsFilter; newsPage = 0; document.querySelectorAll("[data-news-filter]").forEach((tab) => tab.classList.toggle("active", tab === newsTab)); renderNews(); lucide.createIcons(); }
     if (languageTab) setNewsLanguage(languageTab.dataset.newsLanguage);
     if (sidebarToggle) toggleSidebar();
@@ -639,7 +830,8 @@ function bindEvents() {
   document.querySelector("#clear-completed").addEventListener("click", () => { data.tasks = data.tasks.filter((task) => task.status !== "done"); saveData(); renderApp(); });
   document.querySelector("#timer-start").addEventListener("click", toggleTimer);
   document.querySelector("#timer-reset").addEventListener("click", () => { timerSeconds = 25 * 60; renderTimer(); });
-  document.querySelector("#theme-toggle").addEventListener("click", () => { document.body.classList.toggle("dark"); localStorage.setItem("jessboard-theme", document.body.classList.contains("dark") ? "dark" : "light"); });
+  document.querySelector("#theme-toggle").addEventListener("click", () => applyTheme(document.body.classList.contains("dark") ? "light" : "dark"));
+  document.querySelector("#close-project-dialog").addEventListener("click", () => document.querySelector("#project-dialog").close());
   document.querySelector("#refresh-news").addEventListener("click", refreshNews);
   document.querySelector("#refresh-dev-metrics").addEventListener("click", loadDevMetrics);
   document.querySelector("#dev-range").addEventListener("change", (event) => { devRange = event.target.value; localStorage.setItem("jessboard-dev-range", devRange); loadDevMetrics(); });
@@ -649,12 +841,12 @@ function bindEvents() {
 }
 
 // Choose one stable quote for the current calendar day.
-function renderDailyQuote(now) { const quotes = [["The future depends on what you do today.", "Mahatma Gandhi"], ["Well begun is half done.", "Aristotle"], ["Action is the foundational key to all success.", "Pablo Picasso"], ["Nothing will work unless you do.", "Maya Angelou"], ["The secret of getting ahead is getting started.", "Mark Twain"], ["The only way to do great work is to love what you do.", "Steve Jobs"], ["Simplicity is the ultimate sophistication.", "Leonardo da Vinci"]]; const day = Math.floor(now.getTime() / 86400000); const [quote, author] = quotes[day % quotes.length]; document.querySelector("#page-title").textContent = quote; document.querySelector("#quote-author").textContent = `- ${author}`; }
+function renderDailyQuote(now) { const quotes = [{ zh: "未来取决于你今天的行动。", en: "The future depends on what you do today.", author: "Mahatma Gandhi" }, { zh: "好的开始是成功的一半。", en: "Well begun is half done.", author: "Aristotle" }, { zh: "行动是一切成功的根本钥匙。", en: "Action is the foundational key to all success.", author: "Pablo Picasso" }, { zh: "除非你动手，否则什么也不会发生。", en: "Nothing will work unless you do.", author: "Maya Angelou" }, { zh: "领先的秘诀，是开始行动。", en: "The secret of getting ahead is getting started.", author: "Mark Twain" }, { zh: "做伟大工作的唯一方法，是热爱所做的事。", en: "The only way to do great work is to love what you do.", author: "Steve Jobs" }, { zh: "简洁是终极的复杂。", en: "Simplicity is the ultimate sophistication.", author: "Leonardo da Vinci" }]; const quote = quotes[Math.floor(now.getTime() / 86400000) % quotes.length]; document.querySelector("#page-title").textContent = quote[newsLanguage]; document.querySelector("#quote-author").textContent = `- ${quote.author}`; }
 
 // Set the current date labels in the Chinese locale.
-function renderToday() { const now = new Date(); const todayDate = document.querySelector("#today-date"); document.querySelector("#page-kicker").textContent = new Intl.DateTimeFormat("zh-CN", { weekday: "long", month: "long", day: "numeric" }).format(now); if (todayDate) todayDate.textContent = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(now); document.querySelector("#news-edition-date").textContent = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(now); renderDailyQuote(now); }
+function renderToday() { const now = new Date(); const locale = newsLanguage === "en" ? "en-US" : "zh-CN"; const todayDate = document.querySelector("#today-date"); document.querySelector("#page-kicker").textContent = new Intl.DateTimeFormat(locale, { weekday: "long", month: "long", day: "numeric" }).format(now); if (todayDate) todayDate.textContent = new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(now); document.querySelector("#news-edition-date").textContent = new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(now); renderDailyQuote(now); }
 
-if (localStorage.getItem("jessboard-theme") === "dark") document.body.classList.add("dark");
+applyTheme(localStorage.getItem("jessboard-theme") === "light" ? "light" : "dark");
 if (localStorage.getItem("jessboard-sidebar") === "collapsed") document.body.classList.add("sidebar-collapsed");
 updateSidebarToggle();
 document.querySelector("#dev-range").value = devRange;
@@ -663,7 +855,9 @@ bindEvents();
 renderToday();
 setNewsLanguage(newsLanguage);
 renderApp();
+restoreNewsSnapshot();
 renderNews();
 renderTimer();
 loadContext();
 loadShanghaiWeather();
+refreshNews();

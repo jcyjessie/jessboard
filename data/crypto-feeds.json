@@ -1,0 +1,7 @@
+[
+  { "name": "CoinDesk", "url": "https://www.coindesk.com/arc/outboundfeeds/rss" },
+  { "name": "Decrypt", "url": "https://decrypt.co/feed" },
+  { "name": "Blockworks", "url": "https://blockworks.com/feed" },
+  { "name": "Ethereum Foundation", "url": "https://blog.ethereum.org/en/feed.xml" },
+  { "name": "Bitcoin Magazine", "url": "https://bitcoinmagazine.com/feed" }
+]

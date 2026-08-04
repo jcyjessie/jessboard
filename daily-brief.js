@@ -41,11 +41,12 @@
     return task.source === "lark-task" || /实时|eod|图表/i.test(text);
   }
 
-  // Keep abandoned historical assignments out of the active daily brief.
+  // Keep overdue, unrefreshed assignments out of the action-focused daily brief.
   function isStaleTask(task, now) {
     const due = timeOf(task.dueAt);
     const updated = timeOf(task.updatedAt || task.createdAt);
-    return task.source === "lark-task" && due && due < now - 14 * DAY && (!updated || updated < now - 14 * DAY);
+    const activeWindow = 3 * DAY;
+    return task.source === "lark-task" && due && due < now - activeWindow && (!updated || updated < now - activeWindow);
   }
 
   // Exclude image-only and long-unupdated task titles that cannot guide a next action.

@@ -5,16 +5,17 @@ Jessboard 是一个中文个人工作台，用来集中查看任务、项目排�
 ## 当前能力
 
 - 中文总览、我的任务、项目排期、专注和资讯页。
+- 独立设计预览页：打开 `/design-demos.html` 可在四种顶部导航和数据看板风格之间切换，用于确认改版方向，不会改变正式工作台。
 - 项目进度按同步任务的实际工作主题归类，并将 100% 进度纳入已完成统计，避免把全部事项笼统归为 `cam`。
 - 开发分析页：通过“手动刷新”按钮读取本机 Codex 会话 Token、模型和使用场景占比、skill/工具调用、公开 GitHub 事件和跨本机仓库提交；两类提交来源会明确分开，且每条记录显示提交时间。
 - 首次加载时清除旧版示例任务，之后的个人任务保存在当前浏览器。
-- 资讯页手动合并 AI HOT、Follow Builders，以及本地 World Monitor RSS 适配器；默认显示简体中文，也可切换回英文原文。新闻按市场、主题、重要度和时效整合成独立报纸版面，不按 skill 来源分栏。
+- 资讯页合并 AI HOT、Follow Builders、本地 World Monitor RSS、公开财经快讯和公开加密 RSS；统一去重后按 AI 与开发、产品与公司、市场/政策/安全、金融与加密五类阅读，并保留合并来源与原文链接。最近一次成功刷新会保存在当前浏览器，重新打开页面时立即显示，再在后台更新。
 - Codex 会话和飞书数据使用统一的 `data/context.json` 快照格式，页面不接触私有凭证。
 - 总览会自动将飞书 Project 工作流截止时间、完成进度、最近更新和日历安排整理为当天优先级与日程；它只读取数据，不会修改飞书任务。
 - 总览首页以每日工作简报呈现今日必做、会议准备、待确认消息、风险和日终闭环；消息只有由用户确认后才会加入浏览器本地任务。
 - 工作上下文和开发统计只会在页面上按下对应的手动刷新按钮后更新，并在发现紧急截止时间或数据源失败时提示后续处理。
 - 开发分析只读取 `~/.codex/sessions` 与公开 GitHub Events/Compare 接口的聚合结果；Codex 账户额度、账单和会话正文不会展示。
-- 参考 Ontrack 的信息密度和侧边导航，配色使用项目提供的绿色、黑色、橙色和蓝灰色方案。
+- 参考 Ontrack 的信息密度和侧边导航，配色使用项目提供的绿色、黑色、橙色和蓝灰色方案；全站固定使用 Songti SC 中文与 Georgia 英文字体。
 
 ## 本地运行
 
@@ -22,7 +23,7 @@ Jessboard 是一个中文个人工作台，用来集中查看任务、项目排�
 npm start
 ```
 
-然后打开 <http://127.0.0.1:4173>。资讯页和本机同步接口使用完整服务时，请运行 `PORT=4174 npm start` 并打开 <http://127.0.0.1:4174>。服务以前台进程运行，关闭对应终端后服务会停止；直接打开 `index.html` 只能查看静态页面。
+然后打开 <http://127.0.0.1:4173>。这是包含资讯和本机同步接口的完整服务；仅当 4173 已被占用时，才使用 `PORT=4174 npm start`。服务以前台进程运行，关闭对应终端后服务会停止；直接打开 `index.html` 只能查看静态页面。
 
 同步快照命令：
 
@@ -34,7 +35,7 @@ npm run sync
 
 ## 资讯配置
 
-AI HOT 和 Follow Builders 不需要用户 API Key。World Monitor 的公开 MCP 工具需要只读 API Key，可在启动时配置：
+AI HOT 的匿名 v1 资讯接口和 Follow Builders 不需要用户 API Key。World Monitor 的公开 MCP 工具需要只读 API Key，可在启动时配置：
 
 ```bash
 WORLD_MONITOR_API_KEY=your_read_only_key npm start
@@ -48,7 +49,9 @@ ollama pull qwen3:0.6b
 PORT=4174 npm start
 ```
 
-本地模式使用 `OLLAMA_MODEL` 切换模型；Ollama 尚未连接时会保留英文原文，并在来源状态中明确显示。只有需要 World Monitor 托管 MCP 的完整情报结果时，才使用 `WORLD_MONITOR_MODE=hosted WORLD_MONITOR_API_KEY=your_read_only_key npm start`。关闭本机翻译可以使用 `NEWS_TRANSLATE=off`；关闭后，英文来源仍可在资讯页切换查看原文。Jessboard 只保留官方公开 feed 地址，不复制 World Monitor 的 AGPL 源码。
+本地模式使用 `OLLAMA_MODEL` 切换模型；Ollama 尚未连接时会保留英文原文。每次资讯刷新会将最多 12 条最新的外文重点资讯合并交给本机 Codex 翻译，默认最多等待 45 秒，可用 `NEWS_TRANSLATE_TIMEOUT_MS` 调整；剩余文章保留原文，避免翻译阻塞完整刷新。关闭本机翻译可以使用 `NEWS_TRANSLATE=off`。只有需要 World Monitor 托管 MCP 的完整情报结果时，才使用 `WORLD_MONITOR_MODE=hosted WORLD_MONITOR_API_KEY=your_read_only_key npm start`。Jessboard 只保留官方公开 feed 地址，不复制 World Monitor 的 AGPL 源码。
+
+传统金融快讯通过只读 OpenCLI 获取东方财富和新浪财经的公开内容，配置位于 `data/finance-news-sources.json`。服务会优先读取 `OPENCLI_BIN`，否则自动定位 npm 全局安装目录中的 OpenCLI。加密与链上资讯读取 CoinDesk、Decrypt、Blockworks、Ethereum Foundation 和 Bitcoin Magazine 的公开 RSS，配置位于 `data/crypto-feeds.json`。所有这些来源均无需 API Key、付费订阅或钱包授权；部分财经快讯没有单篇 URL 时，页面会链接至该来源的公开快讯页。
 
 ## 飞书连接
 
@@ -62,9 +65,9 @@ lark-cli config init --new
 
 CLI 的只读输出会转换为 `data/context.json` 中的 `feishu.tasks`、`feishu.schedule`、`feishu.notes` 和 `feishu.messages`。会议纪要和消息只有同时命中 Jessie 或实时/EOD 业务关键词，并包含明确行动指令时，才会变成建议任务；可在 `sync.config.json` 的 `lark.actionability` 中调整关键词。Jessboard 不会把 OAuth 凭证写入前端。
 
-### 语言配置
+### 语言与翻译
 
-Follow Builders 的 skill 确实会询问 `en / zh / bilingual`，并将选择保存到 skill 配置；它的原始 feed 本身仍是英文，所以 Jessboard 现在用本机 Codex CLI 执行 `translate.md` 规则后再展示。AI HOT skill 固定提供中文 AI 资讯；World Monitor 的新闻 MCP 工具没有语言参数，Jessboard 会对它的结果使用同一套中文翻译流程。
+AI HOT 固定提供中文 AI 资讯。其余来源保留原始文章链接和原文；翻译成功时显示中文标题与摘要，未翻译的文章直接展示英文原文。来源栏只显示已翻译条数或“英文原文”，不会把本机服务的错误信息展示给读者。
 
 ## 测试
 
@@ -77,7 +80,10 @@ Follow Builders 的 skill 确实会询问 `en / zh / bilingual`，并将选择�
 - [Ontrack 参考页面](https://dribbble.com/shots/27489289-Ontrack-Task-Management-Dashboard)：采用其侧边导航、信息密度和项目进度组织方式。
 - [World Monitor](https://github.com/koala73/worldmonitor)：采用只读 MCP 新闻工具，不复制 AGPL 源码。
 - [Follow Builders](https://github.com/zarazhangrui/follow-builders)：使用其公开中心化 feed，并保留原文链接。
-- [AI HOT Skill](https://raw.githubusercontent.com/KKKKhazix/khazix-skills/main/aihot/SKILL.md)：遵循版本检查、非浏览器 User-Agent、公开只读 API 和来源署名规则。
+- [AI HOT Skill](https://raw.githubusercontent.com/KKKKhazix/khazix-skills/main/aihot/SKILL.md)：已按 v1.3.0 的匿名只读 v1 API 更新接入，使用精选流、站内阅读链接和来源署名规则，不再访问旧兼容层或执行版本检查。
+- [OpenCLI Reader](https://github.com/jackwener/opencli)：已安装为只读来源读取能力；验证东方财富和新浪财经快讯命令可匿名读取，不需要浏览器登录或 API Key。
+- [CoinDesk RSS](https://www.coindesk.com/arc/outboundfeeds/rss)、[Decrypt RSS](https://decrypt.co/feed)、[Blockworks RSS](https://blockworks.com/feed)、[Ethereum Foundation RSS](https://blog.ethereum.org/en/feed.xml) 与 [Bitcoin Magazine RSS](https://bitcoinmagazine.com/feed)：均验证为公开可读取的加密与链上资讯来源。
+- [cryptocurrency.cv OpenAPI](https://cryptocurrency.cv/openapi.json)：当前新闻接口要求 x402 USDC 微支付，因此不作为免费来源接入。
 - [官方 Lark CLI](https://github.com/larksuite/cli)：确认它覆盖文档、消息、任务和会议等飞书数据，但等待用户授权后接入。
 - [Follow Builders 翻译提示](https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/prompts/translate.md)：保留技术词、人名和 URL，并生成自然简体中文。
 - [GitHub REST 提交接口](https://docs.github.com/en/rest/commits/commits)：确认 Compare/Commit 可返回提交和文件改动统计，因此开发分析使用公开 Events + Compare + Commit 数据组合。
@@ -87,7 +93,8 @@ Follow Builders 的 skill 确实会询问 `en / zh / bilingual`，并将选择�
 
 - 中文化和整体 UI 重做。
 - 清空旧版本地示例数据。
-- News Feed 三类来源的统一页面、手动刷新入口、双语切换和报纸分页布局。
+- News Feed 五类来源的统一页面、手动刷新入口、双语切换和报纸分页布局。
+- 传统金融公开快讯与五个免费加密/链上 RSS 来源，按主题筛选并和现有资讯统一去重。
 - 本机静态服务、资讯 API 和上下文快照格式。
 - 飞书 Project 需求和工作流排期的只读同步，使用既有本地私有配置且不暴露凭证。
 - 飞书日程、文档元数据和近期消息预览的本机只读同步。
@@ -100,8 +107,9 @@ Follow Builders 的 skill 确实会询问 `en / zh / bilingual`，并将选择�
 - 每日简报的安静空状态、风险专用红色语义、移动端可用的语言/主题/新建任务入口，以及仅针对同步、最高优先级和风险的手绘提示。
 - Follow Builders 中文翻译适配器。
 - 报纸式资讯流：动态三列排版、市场/主题/重要度标注、底部来源栏，以及上海天气、湿度和农历日期。
+- 四种可切换的顶部导航设计预览：安静指挥台、编辑部看板、AI Studio 和轻量自适应。
+- 资讯刷新缓存、五类阅读筛选、来源栏自适应布局，以及 Songti SC + Georgia 的固定全站字体。
 
 ## 待完成
 
-- 扩充本地 World Monitor 的精选 RSS 范围；如需完整托管情报，再配置 World Monitor API Key。
-- 为 Follow Builders 英文内容增加可选的中文摘要生成。
+- 扩充本地 World Monitor 的精选 RSS 范围，并按需要提高外文资讯的中文翻译覆盖；如需完整托管情报，再配置 World Monitor API Key。

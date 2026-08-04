@@ -7,10 +7,13 @@
     <meta name="description" content="Jessboard 个人工作台：任务、项目排期、Codex 会话和资讯。" />
     <title>Jessboard · 个人工作台</title>
     <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="neat-annotations.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="studio-theme">
     <div class="app-shell">
       <aside class="sidebar">
         <div class="sidebar-brand-row"><a class="brand" href="#dashboard" aria-label="Jessboard 总览">
@@ -20,12 +23,12 @@
 
         <div class="workspace-label">个人工作台</div>
         <nav class="nav-list" aria-label="主导航">
-          <button class="nav-item active" data-view="dashboard" data-tooltip="总览" type="button" title="总览"><i data-lucide="layout-dashboard"></i><span>总览</span></button>
-          <button class="nav-item" data-view="today" data-tooltip="我的任务" type="button" title="我的任务"><i data-lucide="check-square-2"></i><span>我的任务</span></button>
-          <button class="nav-item" data-view="projects" data-tooltip="项目排期" type="button" title="项目排期"><i data-lucide="kanban-square"></i><span>项目排期</span></button>
-          <button class="nav-item" data-view="focus" data-tooltip="专注" type="button" title="专注"><i data-lucide="timer"></i><span>专注</span></button>
-          <button class="nav-item" data-view="dev" data-tooltip="开发分析" type="button" title="开发分析"><i data-lucide="activity"></i><span>开发分析</span></button>
-          <button class="nav-item" data-view="news" data-tooltip="资讯" type="button" title="资讯"><i data-lucide="newspaper"></i><span>资讯</span><span class="nav-badge" id="news-nav-count">0</span></button>
+          <button class="nav-item active" data-view="dashboard" data-tooltip="总览" type="button" title="总览"><i data-lucide="layout-dashboard"></i><span data-i18n="navDashboard">总览</span></button>
+          <button class="nav-item" data-view="today" data-tooltip="我的任务" type="button" title="我的任务"><i data-lucide="check-square-2"></i><span data-i18n="navToday">我的任务</span></button>
+          <button class="nav-item" data-view="projects" data-tooltip="项目排期" type="button" title="项目排期"><i data-lucide="kanban-square"></i><span data-i18n="navProjects">项目排期</span></button>
+          <button class="nav-item" data-view="focus" data-tooltip="专注" type="button" title="专注"><i data-lucide="timer"></i><span data-i18n="navFocus">专注</span></button>
+          <button class="nav-item" data-view="dev" data-tooltip="开发分析" type="button" title="开发分析"><i data-lucide="activity"></i><span data-i18n="navDev">开发分析</span></button>
+          <button class="nav-item" data-view="news" data-tooltip="资讯" type="button" title="资讯"><i data-lucide="newspaper"></i><span data-i18n="navNews">资讯</span><span class="nav-badge" id="news-nav-count">0</span></button>
         </nav>
 
         <div class="sidebar-footer">
@@ -45,49 +48,49 @@
           <div class="topbar-actions">
             <div class="language-toggle global-language-toggle" role="group" aria-label="页面语言"><button class="filter-tab active" data-news-language="zh" type="button">中文</button><button class="filter-tab" data-news-language="en" type="button">English</button></div>
             <button class="icon-button" id="theme-toggle" type="button" aria-label="切换深色模式" title="切换深色模式"><i data-lucide="moon"></i></button>
-            <button class="primary-button" id="open-task-dialog" type="button"><i data-lucide="plus"></i>新建任务</button>
+            <button class="primary-button" id="open-task-dialog" type="button"><i data-lucide="plus"></i><span data-i18n="newTask">新建任务</span></button>
           </div>
         </header>
 
         <section class="view active" id="dashboard-view" data-view-panel="dashboard">
           <div class="welcome-row">
-            <div><p class="eyebrow">今日工作台</p><h2>你好，Jessie <span class="wave">✦</span></h2><p class="muted-copy">把来自 Codex、飞书和灵感流的事项，收拢到一个清晰的节奏里。</p></div>
+            <div><p class="eyebrow" data-i18n="todayWorkspace">今日工作台</p><h2><span data-i18n="greeting">你好，Jessie</span> <span class="wave">✦</span></h2></div>
           </div>
           <section class="daily-brief" aria-label="每日工作简报">
-            <div class="daily-brief-heading"><div><p class="eyebrow">每日工作简报</p><h2>先处理会推动今天的事</h2><p class="muted-copy">任务、会议和飞书消息按下一步行动整理；消息需要你确认后才会成为个人任务。</p></div><div class="work-plan-actions"><span class="list-count" id="daily-brief-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i>手动刷新</button></div></div>
+            <div class="daily-brief-heading"><div><p class="eyebrow" data-i18n="dailyBrief">每日工作简报</p><h2 data-i18n="dailyBriefTitle">先处理会推动今天的事</h2><p class="muted-copy" data-i18n="dailyBriefCopy">任务、会议和飞书消息按下一步行动整理；消息需要你确认后才会成为个人任务。</p></div><div class="work-plan-actions"><span class="list-count" id="daily-brief-updated" aria-live="polite">等待同步</span><button class="secondary-button" id="refresh-context" type="button"><i data-lucide="refresh-cw"></i><span data-i18n="manualRefresh">手动刷新</span></button></div></div>
             <div class="daily-brief-summary" id="daily-brief-summary"></div>
             <div class="daily-main-grid">
-              <section class="brief-panel priority-brief"><div class="brief-panel-heading"><div><p class="eyebrow">今日必做</p><h3>优先推进</h3></div><span>截止、客户影响与依赖</span></div><div class="brief-list" id="daily-priority-list"></div></section>
-              <section class="brief-panel meeting-brief"><div class="brief-panel-heading"><div><p class="eyebrow">会议准备</p><h3>即将开始</h3></div><span>未来 48 小时</span></div><div class="brief-list" id="daily-meeting-list"></div></section>
+              <section class="brief-panel priority-brief"><div class="brief-panel-heading"><div><p class="eyebrow" data-i18n="mustDo">今日必做</p><h3 data-i18n="priorityTitle">优先推进</h3></div><span data-i18n="priorityHint">截止、客户影响与依赖</span></div><div class="brief-list" id="daily-priority-list"></div></section>
+              <section class="brief-panel meeting-brief"><div class="brief-panel-heading"><div><p class="eyebrow" data-i18n="meetingPrep">会议准备</p><h3 data-i18n="meetingTitle">即将开始</h3></div><span data-i18n="next48Hours">未来 48 小时</span></div><div class="brief-list" id="daily-meeting-list"></div></section>
             </div>
             <div class="daily-secondary-grid">
-              <section class="brief-panel reply-brief"><div class="brief-panel-heading"><div><p class="eyebrow">待确认消息</p><h3>可能需要你回复</h3></div><span>不会自动建任务</span></div><div class="reply-list" id="daily-reply-list"></div></section>
-              <section class="brief-panel risk-brief"><div class="brief-panel-heading"><div><p class="eyebrow">风险与依赖</p><h3>避免工作停滞</h3></div><span>需要确认或跟进</span></div><div class="brief-list" id="daily-risk-list"></div></section>
+              <section class="brief-panel reply-brief"><div class="brief-panel-heading"><div><p class="eyebrow" data-i18n="pendingMessages">待确认消息</p><h3 data-i18n="replyTitle">可能需要你回复</h3></div><span data-i18n="noAutoTask">不会自动建任务</span></div><div class="reply-list" id="daily-reply-list"></div></section>
+              <section class="brief-panel risk-brief"><div class="brief-panel-heading"><div><p class="eyebrow" data-i18n="risks">风险与依赖</p><h3 data-i18n="riskTitle">避免工作停滞</h3></div><span data-i18n="riskHint">需要确认或跟进</span></div><div class="brief-list" id="daily-risk-list"></div></section>
             </div>
             <section class="daily-closeout" id="daily-closeout"></section>
           </section>
           <section class="panel projects-panel">
-            <div class="panel-heading"><div><p class="eyebrow">工作流</p><h2>项目进度</h2></div><button class="text-button" data-go-to="projects" type="button">打开排期 <i data-lucide="arrow-up-right"></i></button></div>
+            <div class="panel-heading"><div><p class="eyebrow" data-i18n="workflow">工作流</p><h2 data-i18n="projectProgress">项目进度</h2></div><button class="text-button" data-go-to="projects" type="button"><span data-i18n="openSchedule">打开排期</span> <i data-lucide="arrow-up-right"></i></button></div>
             <div class="project-cards" id="project-cards"></div>
           </section>
-          <section class="source-strip" aria-label="数据源状态"><div class="source-strip-heading"><div><p class="eyebrow">数据连接</p><h2>你的工作上下文</h2></div><button class="text-button" data-go-to="news" type="button">查看资讯 <i data-lucide="arrow-up-right"></i></button></div><div class="source-status-grid" id="source-status-grid"></div></section>
+          <section class="source-strip" aria-label="数据源状态"><div class="source-strip-heading"><div><p class="eyebrow" data-i18n="dataConnections">数据连接</p><h2 data-i18n="workContext">你的工作上下文</h2></div><button class="text-button" data-go-to="news" type="button"><span data-i18n="viewBrief">查看资讯</span> <i data-lucide="arrow-up-right"></i></button></div><div class="source-status-grid" id="source-status-grid"></div></section>
         </section>
 
         <section class="view" id="today-view" data-view-panel="today">
-          <div class="view-intro"><div><p class="eyebrow">工作清单</p><h2>我的任务</h2><p class="muted-copy">把今天要推进的事，放在一个可以完成的列表里。</p></div><button class="secondary-button" id="clear-completed" type="button"><i data-lucide="check-check"></i>清除已完成</button></div>
-          <section class="panel all-tasks-panel"><div class="task-toolbar"><div class="filter-tabs" role="tablist" aria-label="任务筛选"><button class="filter-tab active" data-task-filter="all" type="button">全部</button><button class="filter-tab" data-task-filter="open" type="button">未完成</button><button class="filter-tab" data-task-filter="done" type="button">已完成</button></div><span class="list-count" id="task-list-count">0 项</span></div><div class="task-list large" id="all-task-list"></div></section>
+          <div class="view-intro"><div><p class="eyebrow" data-i18n="taskList">工作清单</p><h2 data-i18n="myTasks">我的任务</h2><p class="muted-copy" data-i18n="taskListCopy">把今天要推进的事，放在一个可以完成的列表里。</p></div><button class="secondary-button" id="clear-completed" type="button"><i data-lucide="check-check"></i><span data-i18n="clearCompleted">清除已完成</span></button></div>
+          <section class="panel all-tasks-panel"><div class="task-toolbar"><div class="task-filter-groups"><div class="filter-tabs" role="tablist" aria-label="任务状态筛选"><button class="filter-tab active" data-task-filter="all" type="button">全部</button><button class="filter-tab" data-task-filter="open" type="button">未完成</button><button class="filter-tab" data-task-filter="done" type="button">已完成</button></div><div class="filter-tabs priority-filter-tabs" role="tablist" aria-label="优先级筛选"><button class="filter-tab active" data-priority-filter="all" type="button">所有优先级</button><button class="filter-tab" data-priority-filter="high" type="button">高</button><button class="filter-tab" data-priority-filter="medium" type="button">中</button><button class="filter-tab" data-priority-filter="low" type="button">低</button></div></div><span class="list-count" id="task-list-count">0 项</span></div><div class="task-list large" id="all-task-list"></div></section>
         </section>
 
         <section class="view" id="projects-view" data-view-panel="projects">
-          <div class="view-intro"><div><p class="eyebrow">交付节奏</p><h2>项目排期</h2><p class="muted-copy">从计划到复盘，按状态查看每一项工作。</p></div><span class="status-chip orange">本地排期</span></div>
+          <div class="view-intro"><div><p class="eyebrow" data-i18n="deliveryCadence">交付节奏</p><h2 data-i18n="projectSchedule">项目排期</h2><p class="muted-copy" data-i18n="projectScheduleCopy">从计划到复盘，按状态查看每一项工作。</p></div><span class="status-chip orange" data-i18n="localSchedule">本地排期</span></div>
           <div class="kanban-board" id="kanban-board"></div>
         </section>
 
         <section class="view" id="focus-view" data-view-panel="focus">
-          <div class="view-intro"><div><p class="eyebrow">专注时段</p><h2>一次只做一件事</h2></div></div>
+          <div class="view-intro"><div><p class="eyebrow" data-i18n="focusSession">专注时段</p><h2 data-i18n="focusOne">一次只做一件事</h2></div></div>
           <div class="focus-layout">
-            <section class="panel timer-panel"><p class="eyebrow">当前专注</p><div class="timer-display" id="timer-display">25:00</div><p class="timer-task" id="timer-task">选择一项任务开始。</p><div class="timer-actions"><button class="primary-button" id="timer-start" type="button"><i data-lucide="play"></i>开始专注</button><button class="icon-button" id="timer-reset" type="button" aria-label="重置专注计时" title="重置专注计时"><i data-lucide="rotate-ccw"></i></button></div></section>
-            <section class="panel focus-task-panel"><div class="panel-heading"><div><p class="eyebrow">专注目标</p><h2>选择任务</h2></div></div><div class="focus-task-options" id="focus-task-options"></div><div class="focus-pagination" id="focus-pagination"></div></section>
+            <section class="panel timer-panel"><p class="eyebrow" data-i18n="currentFocus">当前专注</p><div class="timer-display" id="timer-display">25:00</div><p class="timer-task" id="timer-task" data-i18n="selectTask">选择一项任务开始。</p><div class="timer-actions"><button class="primary-button" id="timer-start" type="button"><i data-lucide="play"></i><span data-i18n="startFocus">开始专注</span></button><button class="icon-button" id="timer-reset" type="button" aria-label="重置专注计时" title="重置专注计时"><i data-lucide="rotate-ccw"></i></button></div></section>
+            <section class="panel focus-task-panel"><div class="panel-heading"><div><p class="eyebrow" data-i18n="focusGoal">专注目标</p><h2 data-i18n="selectTaskHeading">选择任务</h2></div></div><div class="focus-task-options" id="focus-task-options"></div><div class="focus-pagination" id="focus-pagination"></div></section>
           </div>
         </section>
 
@@ -105,10 +108,10 @@
         </section>
 
         <section class="view news-view" id="news-view" data-view-panel="news">
-          <header class="paper-masthead"><div class="paper-date"><span class="eyebrow">JESSBOARD DAILY</span><strong id="news-edition-date">2026 年 7 月 23 日</strong><span>第 01 版 · 人工刷新</span><span id="news-lunar">农历加载中</span></div><div class="paper-title"><p>每日咨询</p><h2>Jess日报</h2><span>AI 行业 · 全球动态 · Builder 观点</span></div><div class="paper-actions"><div class="paper-weather"><span id="news-weather">上海天气加载中</span><span>本地天气 · 每 10 分钟更新</span></div><div class="paper-controls"><button class="primary-button" id="refresh-news" type="button"><i data-lucide="refresh-cw"></i>刷新</button></div></div></header>
-          <div class="news-toolbar"><div class="news-controls"><div class="filter-tabs" role="tablist" aria-label="资讯分类"><button class="filter-tab active" data-news-filter="all" type="button">全部</button><button class="filter-tab" data-news-filter="ai" type="button">AI 与模型</button><button class="filter-tab" data-news-filter="market" type="button">市场与政策</button><button class="filter-tab" data-news-filter="product" type="button">产品与公司</button><button class="filter-tab" data-news-filter="builders" type="button">开发者生态</button><button class="filter-tab" data-news-filter="security" type="button">安全</button></div></div><div class="paper-pagination"><button class="icon-button" id="news-prev" type="button" aria-label="上一版" title="上一版"><i data-lucide="arrow-left"></i></button><span id="news-page-count">第 1 / 1 版</span><button class="icon-button" id="news-next" type="button" aria-label="下一版" title="下一版"><i data-lucide="arrow-right"></i></button></div><span class="list-count" id="news-updated">尚未刷新</span></div>
+          <header class="paper-masthead"><div class="paper-date"><span class="eyebrow">JESSBOARD DAILY</span><strong id="news-edition-date">2026 年 7 月 23 日</strong><span>第 01 版 · 人工刷新</span><span id="news-lunar">农历加载中</span></div><div class="paper-title"><p>每日咨询</p><h2 id="news-masthead-title">Jess日报</h2><span data-i18n="newsScope">AI 行业 · 全球动态 · Builder 观点 · 传统金融 · 加密与链上</span></div><div class="paper-actions"><div class="paper-weather"><span id="news-weather">上海天气加载中</span><span>本地天气 · 每 10 分钟更新</span></div><div class="paper-controls"><button class="primary-button" id="refresh-news" type="button"><i data-lucide="refresh-cw"></i>刷新</button></div></div></header>
+          <div class="news-toolbar"><div class="news-controls"><div class="filter-tabs" role="tablist" aria-label="资讯分类"><button class="filter-tab active" data-news-filter="all" type="button">全部</button><button class="filter-tab" data-news-filter="aiBuilders" type="button">AI 与开发</button><button class="filter-tab" data-news-filter="product" type="button">产品与公司</button><button class="filter-tab" data-news-filter="world" type="button">市场、政策与安全</button><button class="filter-tab" data-news-filter="financeCrypto" type="button">金融与加密</button></div></div><div class="paper-pagination"><button class="icon-button" id="news-prev" type="button" aria-label="上一版" title="上一版"><i data-lucide="arrow-left"></i></button><span id="news-page-count">第 1 / 1 版</span><button class="icon-button" id="news-next" type="button" aria-label="下一版" title="下一版"><i data-lucide="arrow-right"></i></button></div><span class="list-count" id="news-updated">尚未刷新</span></div>
           <div class="news-layout"><main class="newspaper-page" id="news-list"></main></div>
-          <footer class="news-footer"><section class="news-source-strip"><div><p class="eyebrow">本期来源</p><p class="muted-copy">所有来源合并后按市场、主题、时效和重要度编辑；来源名称和原文链接始终保留。</p></div><div class="provider-list" id="provider-list"></div></section><p class="news-editor-note">编辑规则：头条依据可靠度、时效、影响范围和信息密度排序；每篇新闻显示对应市场、主题和重要度。默认中文，可切换英文原文。</p></footer>
+          <footer class="news-footer"><section class="news-source-strip"><div><p class="eyebrow">本期来源</p><p class="muted-copy" data-i18n="newsSourcesCopy">所有来源合并后按市场、主题、时效和重要度编辑；来源名称与可用原文或快讯入口始终保留。</p></div><div class="provider-list" id="provider-list"></div></section><p class="news-editor-note" data-i18n="newsEditorNote">编辑规则：头条依据可靠度、时效、影响范围和信息密度排序；每篇新闻显示对应市场、主题和重要度。默认中文，可切换英文原文。</p></footer>
         </section>
       </main>
     </div>
@@ -123,9 +126,14 @@
       </form>
     </dialog>
 
+    <dialog class="project-dialog" id="project-dialog">
+      <div class="dialog-content"><div class="dialog-heading"><div><p class="eyebrow" id="project-dialog-kicker">项目进度</p><h2 id="project-dialog-title">项目详情</h2></div><button class="icon-button" id="close-project-dialog" type="button" aria-label="关闭项目详情" title="关闭"><i data-lucide="x"></i></button></div><div id="project-dialog-content"></div></div>
+    </dialog>
+
+
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script src="work-plan.js"></script>
     <script src="daily-brief.js?v=20260728-01"></script>
-    <script src="app.js?v=20260728-01"></script>
+    <script src="app.js?v=20260803-03"></script>
   </body>
 </html>

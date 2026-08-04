@@ -1,0 +1,146 @@
+<!-- Jessboard design preview: compare four top-navigation dashboard directions before updating the live workspace. -->
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Jessboard dashboard design direction preview" />
+    <title>Jessboard - Design Direction Preview</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="neat-annotations.css" />
+    <link rel="stylesheet" href="design-demos.css" />
+  </head>
+  <body class="theme-command">
+    <main class="preview-shell">
+      <header class="preview-intro">
+        <div>
+          <p class="preview-kicker">JESSBOARD / DESIGN DIRECTIONS</p>
+          <h1>选择你更喜欢的工作台气质</h1>
+        </div>
+        <p>四个方案均采用顶部横向导航。点击下方标签，比较布局、组件和交互反馈。</p>
+      </header>
+
+      <div class="direction-tabs" role="tablist" aria-label="设计方案">
+        <button class="direction-tab active" data-theme="command" role="tab" aria-selected="true" type="button">01 安静指挥台</button>
+        <button class="direction-tab" data-theme="editorial" role="tab" aria-selected="false" type="button">02 编辑部看板</button>
+        <button class="direction-tab" data-theme="studio" role="tab" aria-selected="false" type="button">03 AI Studio</button>
+        <button class="direction-tab" data-theme="adaptive" role="tab" aria-selected="false" type="button">04 轻量自适应</button>
+      </div>
+
+      <section class="design-canvas" aria-label="Jessboard dashboard preview">
+        <header class="app-topnav">
+          <a class="preview-brand" href="#preview-dashboard" aria-label="Jessboard 总览">
+            <span class="brand-symbol">J</span>
+            <span>Jessboard</span>
+          </a>
+          <nav class="primary-nav" aria-label="主导航">
+            <a class="nav-link active" href="#preview-dashboard">总览</a>
+            <a class="nav-link" href="#tasks">我的任务 <span>8</span></a>
+            <a class="nav-link" href="#projects">项目排期</a>
+            <a class="nav-link optional-nav" href="#focus">专注</a>
+            <a class="nav-link optional-nav" href="#analysis">开发分析</a>
+            <a class="nav-link optional-nav" href="#news">资讯</a>
+          </nav>
+          <div class="nav-actions">
+            <button class="round-control" type="button" aria-label="搜索" title="搜索"><i data-lucide="search"></i></button>
+            <button class="round-control" type="button" aria-label="切换深色模式" title="切换深色模式"><i data-lucide="moon"></i></button>
+            <button class="avatar-control" type="button" aria-label="打开个人菜单" title="个人菜单">J</button>
+            <button class="new-task-button" type="button"><i data-lucide="plus"></i><span>新建任务</span></button>
+          </div>
+        </header>
+
+        <section class="dashboard-body" id="preview-dashboard">
+          <section class="hero-row">
+            <div>
+              <p class="section-label">星期五，7 月 31 日</p>
+              <h2 id="preview-title">今天，先推进真正重要的事。</h2>
+              <p class="hero-copy" id="preview-copy">工作上下文已整理为清晰的下一步行动。</p>
+            </div>
+            <div class="hero-status"><span class="status-dot"></span><span id="status-copy">3 项需要今天处理</span></div>
+          </section>
+
+          <section class="metric-strip" aria-label="今日数据摘要">
+            <article class="metric-unit"><span>今日优先事项</span><strong>03</strong><small>其中 1 项临近截止</small></article>
+            <article class="metric-unit"><span>计划专注时间</span><strong>2h 30m</strong><small>较昨日多 30 分钟</small></article>
+            <article class="metric-unit"><span>项目进度</span><strong>68%</strong><small>2 个项目顺利推进</small></article>
+            <article class="metric-unit"><span>待确认消息</span><strong>05</strong><small>不会自动创建任务</small></article>
+          </section>
+
+          <section class="signal-stage" aria-labelledby="signal-title">
+            <div class="signal-stage-copy">
+              <p class="section-label">WORK SIGNAL / LIVE</p>
+              <h3 id="signal-title">工作信号正在汇聚</h3>
+              <p>任务、项目、消息与开发记录不再散落在不同地方，而是成为可以判断下一步的即时信号。</p>
+              <div class="signal-state-list">
+                <span><i class="signal-state-dot ready"></i>任务节奏稳定</span>
+                <span><i class="signal-state-dot watch"></i>1 个项目需要关注</span>
+              </div>
+            </div>
+            <div class="signal-visual" aria-label="工作信号变化图">
+              <div class="signal-scale"><span>NOW</span><span>+ 6H</span></div>
+              <div class="signal-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="signal-cursor"><span></span><b>14:00<br />Demo 走查</b></div>
+            </div>
+          </section>
+
+          <section class="dashboard-grid">
+            <section class="priority-panel" aria-labelledby="priority-title">
+              <div class="panel-heading">
+                <div><p class="section-label">TODAY'S PRIORITIES</p><h3 id="priority-title"><span class="ann ann-s ann-green priority-heading-note" data-note="start here">优先推进</span></h3></div>
+                <button class="quiet-action" type="button">查看全部 <i data-lucide="arrow-up-right"></i></button>
+              </div>
+              <div class="priority-list">
+                <button class="priority-row selected" type="button"><span class="check-mark"></span><span><strong><span class="ann ann-amber">确认需求 Demo 的交互细节</span></strong><small>CAM Demo · 今天 14:00</small></span><em>高</em></button>
+                <button class="priority-row" type="button"><span class="check-mark"></span><span><strong>整理本周项目风险与依赖</strong><small>工作计划 · 今天</small></span><em>中</em></button>
+                <button class="priority-row" type="button"><span class="check-mark"></span><span><strong>复核开发分析的最新数据</strong><small>Jessboard · 今天</small></span><em>中</em></button>
+              </div>
+            </section>
+
+            <section class="schedule-panel" aria-labelledby="schedule-title">
+              <div class="panel-heading"><div><p class="section-label">NEXT 48 HOURS</p><h3 id="schedule-title">接下来</h3></div><i data-lucide="calendar-days"></i></div>
+              <ol class="schedule-list">
+                <li><time>10:30</time><span><strong>需求评审</strong><small>产品与研发</small></span></li>
+                <li><time>14:00</time><span><strong>Demo 走查</strong><small>CAM 项目</small></span></li>
+                <li><time>16:30</time><span><strong>本周复盘</strong><small>个人工作台</small></span></li>
+              </ol>
+            </section>
+
+            <section class="project-panel" aria-labelledby="project-title">
+              <div class="panel-heading"><div><p class="section-label">PROJECT RHYTHM</p><h3 id="project-title">项目节奏</h3></div><button class="icon-only" type="button" aria-label="查看项目排期" title="查看项目排期"><i data-lucide="arrow-right"></i></button></div>
+              <div class="project-bars">
+                <div><span><strong>Jessboard</strong><small>68%</small></span><b><i class="progress-a"></i></b></div>
+                <div><span><strong>CAM Demo</strong><small>82%</small></span><b><i class="progress-b"></i></b></div>
+                <div><span><strong>用户指南</strong><small>41%</small></span><b><i class="progress-c"></i></b></div>
+              </div>
+            </section>
+
+            <section class="focus-panel" aria-labelledby="focus-title">
+              <div><p class="section-label">FOCUS WINDOW</p><h3 id="focus-title">下一段专注</h3><p>从一件可以完成的事开始。</p></div>
+              <div class="focus-clock">25:00</div>
+              <button class="focus-button" type="button"><i data-lucide="play"></i><span>开始专注</span></button>
+            </section>
+
+            <section class="news-panel" id="news" aria-labelledby="news-title">
+              <div class="panel-heading"><div><p class="section-label">NEWS WIRE</p><h3 id="news-title">资讯速览</h3></div><button class="quiet-action" type="button">查看资讯 <i data-lucide="arrow-up-right"></i></button></div>
+              <div class="news-wire-list">
+                <article><span>AI 与模型</span><strong>产品团队如何把模型能力变成可用的工作流</strong><small>12 分钟前 · Follow Builders</small></article>
+                <article><span>市场与政策</span><strong>本周值得关注的 AI 产品与行业动态</strong><small>34 分钟前 · AI HOT</small></article>
+              </div>
+            </section>
+          </section>
+        </section>
+      </section>
+
+      <section class="direction-notes" aria-live="polite">
+        <p class="section-label" id="direction-label">01 / 安静指挥台</p>
+        <h2 id="direction-name">稳定、克制，适合每天高频使用</h2>
+        <p id="direction-description">浅绿色与纸张白为主，导航用细下划线提示当前位置；动效只用于状态变化和页面切换。</p>
+      </section>
+    </main>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="design-demos.js"></script>
+  </body>
+</html>
