@@ -2,11 +2,14 @@
 
 - `index.html`：提供中文工作台结构、每日工作简报、导航、任务对话框、开发分析页和咨询页容器。
 - `styles.css`：提供响应式布局、深浅色模式和绿色/黑色/橙色/蓝灰色视觉系统。
+- `redesign.css`：在旧样式之后加载，提供参考设计对应的共享颜色、桌面外壳、黄色工具栏、深色数据面板、任务视图状态和移动端底部导航。
+- `ux-refinement.css`：在视觉重设计之后加载，提供高任务量表格、到期时间轴、交付工作流、专注时长控件、开发加载状态和渐进式表单的细节样式。
 - `design-demos.html`：提供独立的四种顶部导航与数据看板设计预览，不影响正式工作台。
 - `design-demos.css`：定义设计预览的共用布局及四套可切换的视觉主题。
 - `design-demos.js`：处理设计预览标签切换，并同步展示对应的说明文字。
+- `DESIGN.md`：记录下一轮工作台视觉更新所采用的参考来源、设计 token、布局比例和可访问性边界。
 - `neat-annotations.css`：提供本地的手绘箭头和标记样式，仅用于状态驱动的工作提示。
-- `app.js`：维护本机任务、视图切换、专注计时、上下文状态、每日简报交互、开发分析和资讯渲染；资讯按五类阅读入口、市场、主题、重要度和新鲜度分页为报纸版面，并在浏览器保留最近一次成功刷新结果。
+- `app.js`：维护本机任务、视图切换、专注计时、上下文状态、每日简报交互、开发分析和资讯渲染；任务支持真实到期范围、搜索、分页表格和按到期桶分组的时间轴，项目排期以工作流和交付阶段组织，专注支持时长选择与跳过，开发分析有加载和不可用状态；资讯按五类阅读入口、市场、主题、重要度和新鲜度分页为报纸版面，并在浏览器保留最近一次成功刷新结果。
 - `work-plan.js`：根据只读的飞书 Project 工作流、日历和 Codex 会话状态生成当天优先级和日程。
 - `daily-brief.js`：从只读飞书任务、日程和消息快照筛选每日优先事项、会议准备、待确认消息、风险和闭环信息。
 - `server.mjs`：提供静态文件服务、上下文读取和手动刷新接口、`/api/dev-metrics` 开发聚合接口、`/api/news` 五类资讯聚合接口和 `/api/weather/shanghai` 天气接口；World Monitor 默认走本地 RSS 和 Ollama，最多 12 条外文重点资讯经单次本机 Codex 翻译，财经快讯经只读 OpenCLI 获取，加密资讯读取公开 RSS，托管 MCP 仅显式启用时使用。
@@ -19,7 +22,7 @@
 - `package.json`：提供本机服务和同步命令。
 - `CONTEXT.md`：记录当前交付阶段和关键决定。
 
-`index.html` 加载 `styles.css`、`work-plan.js`、`daily-brief.js` 和 `app.js`。`app.js` 将浏览器本地任务与同步的只读飞书任务统一为各个任务视图的数据源，并从 `server.mjs` 读取上下文、资讯和上海天气；它使用 `daily-brief.js` 的结果渲染首页，并只在用户确认后将消息写入浏览器本地任务。成功的资讯响应会保存到浏览器，新的刷新失败不会清空旧版内容。`design-demos.html` 单独加载 `design-demos.css` 和 `design-demos.js`，用于切换设计主题，不会读取或写入正式任务数据。`work-plan.js` 保留直接分配的任务和 EOD 范围的 Project 任务来进行优先级计算。`metrics.mjs` 还按模型和会话中最强的已记录 skill 信号汇总 Token，后者用于测试与验收、产品规划、界面与浏览、Skill 建设和其他工作等使用场景。`sync.mjs` 调用 `workteam-morning-report` 的本地只读 Project 帮助程序，以及已授权的本机 Lark CLI；它将任务、Project 需求、工作流进度、排期、日程、分页文档标题/链接、截断后的消息预览和安全 Codex 会话摘要写入 `data/context.json`。建议任务必须同时通过 Jessie/实时-EOD 关键词和明确行动指令两层筛选，关键词可在 `sync.config.json` 调整。`server.mjs` 分别请求 AI HOT、Follow Builders、World Monitor、财经快讯和加密 RSS，单个来源失败不会影响其余来源；它为每条资讯保留原文和中文字段，并只向前端返回简洁的翻译状态。财经来源通过配置中限定的只读命令执行，加密来源直接读取公开 RSS。私有的 Codex/飞书内容只能通过 `data/context.json` 快照进入页面。
+`index.html` 依次加载 `styles.css`、`redesign.css`、`ux-refinement.css`、`work-plan.js`、`daily-brief.js` 和 `app.js`。`app.js` 将浏览器本地任务与同步的只读飞书任务统一为各个任务视图的数据源，并从 `server.mjs` 读取上下文、资讯和上海天气；它使用 `daily-brief.js` 的结果渲染首页，并只在用户确认后将消息写入浏览器本地任务。成功的资讯响应会保存到浏览器，新的刷新失败不会清空旧版内容。`redesign.css` 与 `ux-refinement.css` 只覆盖展示层，不改变上述数据来源和请求边界。`design-demos.html` 单独加载 `design-demos.css` 和 `design-demos.js`，用于切换设计主题，不会读取或写入正式任务数据。`work-plan.js` 保留直接分配的任务和 EOD 范围的 Project 任务来进行优先级计算。`metrics.mjs` 还按模型和会话中最强的已记录 skill 信号汇总 Token，后者用于测试与验收、产品规划、界面与浏览、Skill 建设和其他工作等使用场景。`sync.mjs` 调用 `workteam-morning-report` 的本地只读 Project 帮助程序，以及已授权的本机 Lark CLI；它将任务、Project 需求、工作流进度、排期、日程、分页文档标题/链接、截断后的消息预览和安全 Codex 会话摘要写入 `data/context.json`。建议任务必须同时通过 Jessie/实时-EOD 关键词和明确行动指令两层筛选，关键词可在 `sync.config.json` 调整。`server.mjs` 分别请求 AI HOT、Follow Builders、World Monitor、财经快讯和加密 RSS，单个来源失败不会影响其余来源；它为每条资讯保留原文和中文字段，并只向前端返回简洁的翻译状态。财经来源通过配置中限定的只读命令执行，加密来源直接读取公开 RSS。私有的 Codex/飞书内容只能通过 `data/context.json` 快照进入页面。
 
 项目保持前端和同步服务分离，原因是浏览器不能安全保存飞书授权，也可能受到跨域限制。所有外部内容都显示原文链接和来源名称。World Monitor 本地模式不需要 API Key；Ollama 或本机翻译暂不可用时保留原文，来源栏仅显示读者可理解的语言状态。托管 MCP 模式仍会在没有 API Key 时显示不可用状态。
 

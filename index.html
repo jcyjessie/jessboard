@@ -9,9 +9,11 @@
     <link rel="preconnect" href="https://unpkg.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Shantell+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="neat-annotations.css" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="redesign.css" />
+    <link rel="stylesheet" href="ux-refinement.css" />
   </head>
   <body class="studio-theme">
     <div class="app-shell">
@@ -42,12 +44,12 @@
         <header class="topbar">
           <div>
             <p class="eyebrow" id="page-kicker">星期三，7 月 22 日</p>
-            <h1 id="page-title">保持对世界的感知。</h1>
-            <p class="quote-author" id="quote-author">- Marcus Aurelius</p>
+            <h1 id="page-title">Jessboard</h1>
+            <p class="quote-author" id="quote-author">今天的工作节奏</p>
           </div>
           <div class="topbar-actions">
             <div class="language-toggle global-language-toggle" role="group" aria-label="页面语言"><button class="filter-tab active" data-news-language="zh" type="button">中文</button><button class="filter-tab" data-news-language="en" type="button">English</button></div>
-            <button class="icon-button" id="theme-toggle" type="button" aria-label="切换深色模式" title="切换深色模式"><i data-lucide="moon"></i></button>
+            <button class="icon-button" id="theme-toggle" type="button" aria-label="切换专注模式" title="切换专注模式"><i data-lucide="maximize-2"></i></button>
             <button class="primary-button" id="open-task-dialog" type="button"><i data-lucide="plus"></i><span data-i18n="newTask">新建任务</span></button>
           </div>
         </header>
@@ -69,6 +71,10 @@
             </div>
             <section class="daily-closeout" id="daily-closeout"></section>
           </section>
+          <section class="dashboard-analytics" aria-label="工作统计">
+            <div class="analytics-heading"><div><p class="eyebrow">工作统计</p><h2>完成情况与工作节奏</h2></div><span class="analytics-range">工作存量 · 最近四周</span></div>
+            <div class="insight-grid" id="insight-grid"></div>
+          </section>
           <section class="panel projects-panel">
             <div class="panel-heading"><div><p class="eyebrow" data-i18n="workflow">工作流</p><h2 data-i18n="projectProgress">项目进度</h2></div><button class="text-button" data-go-to="projects" type="button"><span data-i18n="openSchedule">打开排期</span> <i data-lucide="arrow-up-right"></i></button></div>
             <div class="project-cards" id="project-cards"></div>
@@ -78,18 +84,18 @@
 
         <section class="view" id="today-view" data-view-panel="today">
           <div class="view-intro"><div><p class="eyebrow" data-i18n="taskList">工作清单</p><h2 data-i18n="myTasks">我的任务</h2><p class="muted-copy" data-i18n="taskListCopy">把今天要推进的事，放在一个可以完成的列表里。</p></div><button class="secondary-button" id="clear-completed" type="button"><i data-lucide="check-check"></i><span data-i18n="clearCompleted">清除已完成</span></button></div>
-          <section class="panel all-tasks-panel"><div class="task-toolbar"><div class="task-filter-groups"><div class="filter-tabs" role="tablist" aria-label="任务状态筛选"><button class="filter-tab active" data-task-filter="all" type="button">全部</button><button class="filter-tab" data-task-filter="open" type="button">未完成</button><button class="filter-tab" data-task-filter="done" type="button">已完成</button></div><div class="filter-tabs priority-filter-tabs" role="tablist" aria-label="优先级筛选"><button class="filter-tab active" data-priority-filter="all" type="button">所有优先级</button><button class="filter-tab" data-priority-filter="high" type="button">高</button><button class="filter-tab" data-priority-filter="medium" type="button">中</button><button class="filter-tab" data-priority-filter="low" type="button">低</button></div></div><span class="list-count" id="task-list-count">0 项</span></div><div class="task-list large" id="all-task-list"></div></section>
+          <section class="panel all-tasks-panel"><div class="task-toolbar"><div class="task-toolbar-main"><div class="task-range-menu" id="task-range-menu"><button class="task-range-trigger" id="task-range-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="任务时间范围"><i data-lucide="calendar-days"></i><span id="task-range-label">全部任务</span><i data-lucide="chevron-down"></i></button><div class="task-range-options" id="task-range-options" role="listbox" aria-label="任务时间范围"><button data-task-range="all" role="option" type="button">全部任务</button><button data-task-range="overdue" role="option" type="button">已逾期</button><button data-task-range="today" role="option" type="button">今天到期</button><button data-task-range="week" role="option" type="button">未来 7 天</button><button data-task-range="later" role="option" type="button">以后处理</button></div></div><label class="task-search"><i data-lucide="search"></i><input id="task-search" type="search" placeholder="搜索任务、项目…" aria-label="搜索任务和项目" /></label></div><div class="view-mode-tabs" role="tablist" aria-label="任务展示模式"><button class="view-mode-tab" data-task-layout="card" type="button">卡片</button><button class="view-mode-tab" data-task-layout="block" type="button">时间轴</button><button class="view-mode-tab active" data-task-layout="table" type="button">表格</button></div><span class="list-count" id="task-list-count">0 项</span></div><div class="task-filter-groups"><div class="filter-tabs" role="tablist" aria-label="任务状态筛选"><button class="filter-tab active" data-task-filter="all" type="button">全部</button><button class="filter-tab" data-task-filter="open" type="button">未完成</button><button class="filter-tab" data-task-filter="done" type="button">已完成</button></div><div class="filter-tabs priority-filter-tabs" role="tablist" aria-label="优先级筛选"><button class="filter-tab active" data-priority-filter="all" type="button">所有优先级</button><button class="filter-tab" data-priority-filter="high" type="button">高</button><button class="filter-tab" data-priority-filter="medium" type="button">中</button><button class="filter-tab" data-priority-filter="low" type="button">低</button></div></div><div class="task-list large" id="all-task-list"></div><div class="task-pagination" id="task-pagination"></div></section>
         </section>
 
         <section class="view" id="projects-view" data-view-panel="projects">
-          <div class="view-intro"><div><p class="eyebrow" data-i18n="deliveryCadence">交付节奏</p><h2 data-i18n="projectSchedule">项目排期</h2><p class="muted-copy" data-i18n="projectScheduleCopy">从计划到复盘，按状态查看每一项工作。</p></div><span class="status-chip orange" data-i18n="localSchedule">本地排期</span></div>
+          <div class="view-intro"><div><p class="eyebrow" data-i18n="deliveryCadence">交付节奏</p><h2 data-i18n="projectSchedule">项目排期</h2><p class="muted-copy">围绕工作流、下个里程碑与交付风险查看当前推进情况。</p></div><span class="status-chip orange" data-i18n="localSchedule">本地排期</span></div>
           <div class="kanban-board" id="kanban-board"></div>
         </section>
 
         <section class="view" id="focus-view" data-view-panel="focus">
           <div class="view-intro"><div><p class="eyebrow" data-i18n="focusSession">专注时段</p><h2 data-i18n="focusOne">一次只做一件事</h2></div></div>
           <div class="focus-layout">
-            <section class="panel timer-panel"><p class="eyebrow" data-i18n="currentFocus">当前专注</p><div class="timer-display" id="timer-display">25:00</div><p class="timer-task" id="timer-task" data-i18n="selectTask">选择一项任务开始。</p><div class="timer-actions"><button class="primary-button" id="timer-start" type="button"><i data-lucide="play"></i><span data-i18n="startFocus">开始专注</span></button><button class="icon-button" id="timer-reset" type="button" aria-label="重置专注计时" title="重置专注计时"><i data-lucide="rotate-ccw"></i></button></div></section>
+            <section class="panel timer-panel"><p class="eyebrow" data-i18n="currentFocus">当前专注</p><div class="focus-duration" role="group" aria-label="专注时长"><button data-focus-duration="25" type="button">25 分钟</button><button data-focus-duration="50" type="button">50 分钟</button><button data-focus-duration="90" type="button">90 分钟</button></div><div class="timer-display" id="timer-display">25:00</div><p class="timer-task" id="timer-task" data-i18n="selectTask">选择一项任务开始。</p><div class="timer-actions"><button class="primary-button" id="timer-start" type="button"><i data-lucide="play"></i><span data-i18n="startFocus">开始专注</span></button><button class="icon-button" id="timer-skip" type="button" aria-label="跳过当前任务" title="跳过当前任务"><i data-lucide="skip-forward"></i></button><button class="icon-button" id="timer-reset" type="button" aria-label="重置专注计时" title="重置专注计时"><i data-lucide="rotate-ccw"></i></button></div><p class="focus-round" id="focus-round">第 1 轮 · 25 分钟</p></section>
             <section class="panel focus-task-panel"><div class="panel-heading"><div><p class="eyebrow" data-i18n="focusGoal">专注目标</p><h2 data-i18n="selectTaskHeading">选择任务</h2></div></div><div class="focus-task-options" id="focus-task-options"></div><div class="focus-pagination" id="focus-pagination"></div></section>
           </div>
         </section>
@@ -101,8 +107,8 @@
           <div class="dev-grid">
             <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">Codex 使用</p><h2>Token 消耗</h2></div><div class="dev-detail-controls"><select id="dev-range" aria-label="统计时间范围"><option value="24h">最近 24 小时</option><option value="7d" selected>最近 7 天</option><option value="30d">最近 30 天</option><option value="all">全部时间</option></select><span class="status-chip green">本机记录</span></div></div><div id="codex-token-summary" class="dev-token-summary"></div><div class="dev-bars" id="codex-token-bars"></div><div class="dev-breakdown"><p class="eyebrow">按模型</p><div class="dev-list compact metric-list" id="codex-models"></div></div><div class="dev-breakdown"><p class="eyebrow">使用场景</p><div class="dev-list compact metric-list" id="codex-scenarios"></div></div><div class="dev-breakdown"><p class="eyebrow">最高消耗会话</p><div class="dev-list compact metric-list" id="codex-top-sessions"></div></div></section>
             <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">技能与工具</p><h2>调用偏好</h2></div></div><div class="dev-list" id="dev-skills"></div><div class="dev-list compact" id="dev-tools"></div></section>
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">GitHub 公开活动</p><h2>公开记录中的提交</h2></div><span class="status-chip blue" id="github-state">读取中</span></div><p class="dev-panel-note">仅统计公开事件流可识别的提交，不代表所有本机仓库。</p><div class="dev-github-summary" id="github-summary"></div><div class="dev-commit-list" id="github-commits"></div></section>
-            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">本地工作区</p><h2>已发现的本机提交</h2></div><span class="status-chip pale" id="local-repository-count">读取中</span></div><p class="dev-panel-note">用于查看当前工作区内跨仓库的提交记录。</p><div class="dev-github-summary" id="local-summary"></div><div class="dev-commit-list" id="local-commits"></div><div class="dev-pagination" id="local-pagination"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">GitHub 公开活动</p><h2>公开记录中的提交</h2></div><span class="status-chip blue" id="github-state">读取中</span></div><p class="dev-panel-note" id="github-scope-note">仅统计公开事件流可识别的提交，不代表所有本机仓库。</p><div class="dev-github-summary" id="github-summary"></div><div class="dev-commit-list" id="github-commits"></div></section>
+            <section class="panel dev-panel"><div class="panel-heading"><div><p class="eyebrow">本地工作区</p><h2>已发现的本机提交</h2></div><span class="status-chip pale" id="local-repository-count">读取中</span></div><p class="dev-panel-note" id="local-scope-note">用于查看当前工作区内跨仓库的提交记录。</p><div class="dev-github-summary" id="local-summary"></div><div class="dev-commit-list" id="local-commits"></div><div class="dev-pagination" id="local-pagination"></div></section>
           </div>
           <section class="panel dev-analysis-panel" id="dev-analysis"></section>
         </section>
@@ -120,8 +126,8 @@
       <form id="task-form" method="dialog">
         <div class="dialog-heading"><div><p class="eyebrow">添加工作</p><h2>新建任务</h2></div><button class="icon-button" id="close-task-dialog" type="button" aria-label="关闭任务表单" title="关闭"><i data-lucide="x"></i></button></div>
         <label>任务名称<input id="task-title" name="title" type="text" required maxlength="80" placeholder="接下来要推进什么？" /></label>
-        <div class="form-row"><label>项目<select id="task-project" name="project"></select></label><label>优先级<select id="task-priority" name="priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label></div>
-        <div class="form-row"><label>状态<select id="task-status" name="status"><option value="todo" selected>计划中</option><option value="progress">进行中</option><option value="review">待复盘</option></select></label><label>截止日期<input id="task-due" name="due" type="date" /></label></div>
+        <div class="form-row"><label>优先级<select id="task-priority" name="priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label><label>截止日期<input id="task-due" name="due" type="date" /></label></div>
+        <details class="task-more-fields"><summary>更多选项</summary><div class="form-row"><label>项目<select id="task-project" name="project"></select></label><label>工作类型<select id="task-work-type" name="workType"><option value="product">产品</option><option value="development">开发</option><option value="communication">沟通</option><option value="research">研究</option><option value="operations">行政</option></select></label></div><div class="form-row"><label>状态<select id="task-status" name="status"><option value="todo" selected>计划中</option><option value="progress">进行中</option><option value="review">待复盘</option></select></label></div></details>
         <div class="dialog-actions"><button class="secondary-button" id="cancel-task-dialog" type="button">取消</button><button class="primary-button" type="submit"><i data-lucide="plus"></i>添加任务</button></div>
       </form>
     </dialog>
@@ -134,6 +140,6 @@
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script src="work-plan.js"></script>
     <script src="daily-brief.js?v=20260728-01"></script>
-    <script src="app.js?v=20260803-03"></script>
+    <script src="app.js?v=20260806-02"></script>
   </body>
 </html>

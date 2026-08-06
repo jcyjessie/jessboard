@@ -10,21 +10,28 @@ let providerStatuses = {};
 let newsFilter = "all";
 let newsLanguage = localStorage.getItem("jessboard-language") === "en" ? "en" : "zh";
 let newsPage = 0;
-const newsPageSize = 7;
+const newsPageSize = 9;
 const newsSnapshotKey = "jessboard-news-snapshot-v1";
 let newsLoading = false;
 let taskFilter = "all";
 let priorityFilter = "all";
+let taskSearch = "";
+let taskLayout = localStorage.getItem("jessboard-task-layout") || "table";
+let taskRange = localStorage.getItem("jessboard-task-range") || "all";
+let taskPage = 0;
+const taskPageSize = 40;
+const taskRangeLabels = { all: "全部任务", overdue: "已逾期", today: "今天到期", week: "未来 7 天", later: "以后处理" };
 let devMetrics = null;
 let devMetricsLoading = false;
 let devRange = localStorage.getItem("jessboard-dev-range") || "7d";
 let localCommitPage = 0;
 const localCommitPageSize = 5;
 let contextRefreshLoading = false;
-let timerSeconds = 25 * 60;
+let focusDuration = Number(localStorage.getItem("jessboard-focus-duration")) || 25;
+let timerSeconds = focusDuration * 60;
 let timerId = null;
 let focusPage = 0;
-const focusPageSize = 8;
+const focusPageSize = 5;
 const dismissedBriefMessagesKey = "jessboard-dismissed-brief-messages-v1";
 let dismissedBriefMessages = loadDismissedBriefMessages();
 
@@ -82,7 +89,7 @@ function saveDismissedBriefMessages() { localStorage.setItem(dismissedBriefMessa
 function escapeHtml(value = "") { const element = document.createElement("div"); element.textContent = value; return element.innerHTML; }
 
 // Return a display color for a task priority.
-function priorityColor(priority) { return { high: "#cc680a", medium: "#6e8175", low: "#7f9b9a" }[priority] || "#405740"; }
+function priorityColor(priority) { return { high: "#fb9380", medium: "#b58aff", low: "#73ddec" }[priority] || "#70eda0"; }
 
 // Remove long links and excess detail from task titles while preserving the source record link.
 function taskDisplayTitle(task) { const text = String(task.title || "Untitled task").replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim(); return text.length > 58 ? `${text.slice(0, 58)}…` : text; }
@@ -148,8 +155,19 @@ function isStaleTask(task) {
   return due < overdueCutoff && (!updated || updated < overdueCutoff);
 }
 
+// Derive a stable work category when the source task has no explicit type.
+function taskWorkType(task) {
+  if (task.workType) return task.workType;
+  const text = `${task.title || ""} ${task.project || ""}`.toLowerCase();
+  if (/开发|代码|接口|bug|测试|codex|github|deploy|api|code/.test(text)) return "development";
+  if (/会议|沟通|回复|同步|客户|review|meeting/.test(text)) return "communication";
+  if (/研究|调研|分析|数据|资讯|report|research/.test(text)) return "research";
+  if (/整理|报销|行政|排期|日程|文档/.test(text)) return "operations";
+  return "product";
+}
+
 // Add derived display fields to synchronized or locally created work items.
-function prepareTask(task) { return { ...task, priority: taskPriority(task), displayTitle: taskDisplayTitle(task) }; }
+function prepareTask(task) { return { ...task, priority: taskPriority(task), workType: taskWorkType(task), displayTitle: taskDisplayTitle(task) }; }
 
 // Return only the synchronized work relevant to the EOD group or assigned directly to Jessie.
 function syncedWorkTasks() { return [...(contextData.feishu?.todoTasks || []), ...(contextData.feishu?.tasks || []), ...(contextData.feishu?.inferredTasks || [])].filter((task) => (task.source === "lark-task" || task.source === "lark-inferred" || /实时|eod|图表/i.test(`${task.title || ""} ${task.project || ""}`)) && !isStaleTask(task)).map(prepareTask); }
@@ -225,24 +243,88 @@ function taskRow(task, includeDelete = true) {
     ${control}
     <div><div class="task-title" title="${escapeHtml(task.title)}">${escapeHtml(title)}</div><div class="task-meta"><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${t(task.priority)}</span> ${escapeHtml(task.project || t("noProject"))}</div></div>
     <span class="task-due">${escapeHtml(formatDate(task.dueAt || task.due))}</span>
-    ${includeDelete ? `<button class="task-delete" data-delete-task="${escapeHtml(task.id)}" type="button" aria-label="删除任务：${escapeHtml(task.title)}" title="删除任务"><i data-lucide="trash-2"></i></button>` : "<span class=\"priority-dot\"></span>"}
+    ${includeDelete ? `<button class="task-delete" data-delete-task="${escapeHtml(task.id)}" type="button" aria-label="删除任务：${escapeHtml(task.title)}" title="删除任务"><i data-lucide="trash-2"></i></button>` : "<span class=\"task-row-spacer\" aria-hidden=\"true\"></span>"}
   </article>`;
 }
 
-// Render the summary cards across the overview page.
+// Convert a task due value into a safe timestamp for range filters and ordering.
+function taskDueTime(task) {
+  const time = new Date(task.dueAt || task.due || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+// Keep task ranges honest by filtering against due dates, never only changing a label.
+function matchesTaskRange(task) {
+  if (taskRange === "all") return true;
+  const due = taskDueTime(task);
+  if (!due) return taskRange === "later";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endToday = startToday + 24 * 60 * 60 * 1000;
+  const endWeek = startToday + 7 * 24 * 60 * 60 * 1000;
+  if (taskRange === "overdue") return task.status !== "done" && due < startToday;
+  if (taskRange === "today") return due >= startToday && due < endToday;
+  if (taskRange === "week") return due >= startToday && due < endWeek;
+  return due >= endWeek;
+}
+
+// Label tasks for the time-axis view using practical work buckets.
+function taskTimeBucket(task) {
+  const due = taskDueTime(task);
+  if (!due) return { key: "later", label: "稍后安排" };
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endToday = startToday + 24 * 60 * 60 * 1000;
+  const endWeek = startToday + 7 * 24 * 60 * 60 * 1000;
+  if (task.status !== "done" && due < startToday) return { key: "overdue", label: "已逾期" };
+  if (due < endToday) return { key: "today", label: "今天" };
+  if (due < endWeek) return { key: "week", label: "未来 7 天" };
+  return { key: "later", label: "稍后安排" };
+}
+
+// Keep the custom task-range menu synchronized with the active data filter.
+function renderTaskRangeMenu() {
+  const label = document.querySelector("#task-range-label");
+  const menu = document.querySelector("#task-range-menu");
+  const trigger = document.querySelector("#task-range-trigger");
+  if (!label || !menu || !trigger) return;
+  label.textContent = taskRangeLabels[taskRange] || taskRangeLabels.all;
+  menu.classList.remove("open");
+  trigger.setAttribute("aria-expanded", "false");
+  document.querySelectorAll("[data-task-range]").forEach((option) => {
+    const selected = option.dataset.taskRange === taskRange;
+    option.classList.toggle("active", selected);
+    option.setAttribute("aria-selected", String(selected));
+  });
+}
+
+// Render completion, work-type, and activity statistics from the visible task data.
 function renderInsights() {
+  const target = document.querySelector("#insight-grid");
+  if (!target) return;
   const tasks = visibleTasks();
-  const open = tasks.filter((task) => task.status !== "done");
+  const completed = tasks.filter((task) => task.status === "done").length;
+  const open = tasks.length - completed;
+  const completionRate = tasks.length ? Math.round(completed / tasks.length * 100) : 0;
+  const typeLabels = { product: "产品", development: "开发", communication: "沟通", research: "研究", operations: "行政" };
+  const typeCounts = Object.entries(typeLabels).map(([key, label]) => ({ label, count: tasks.filter((task) => task.workType === key).length })).sort((left, right) => right.count - left.count);
+  const leadType = typeCounts[0] || { label: "暂无", count: 0 };
+  const leadShare = tasks.length ? Math.round(leadType.count / tasks.length * 100) : 0;
+  const typeLegend = typeCounts.slice(0, 3).map((item) => ({ ...item, share: tasks.length ? Math.round(item.count / tasks.length * 100) : 0 }));
   const now = Date.now();
-  const overdue = open.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < now);
-  const dueThisWeek = open.filter((task) => { const due = new Date(task.dueAt || 0).getTime(); return due >= now && due <= now + 7 * 24 * 60 * 60 * 1000; });
-  const metrics = [
-    ["#405740", open.length, "未完成任务", "待处理"],
-    ["#cc680a", overdue.length, "已过截止时间", "需要处理"],
-    ["#6e8175", dueThisWeek.length, "未来 7 天截止", "本周截止"],
-    ["#7f9b9a", tasks.filter((task) => task.status === "done").length, "已完成任务", "已完成"]
-  ];
-  document.querySelector("#insight-grid").innerHTML = metrics.map(([color, value, detail, label]) => `<article class="metric-card" style="--metric-color:${color}"><p class="eyebrow">${label}</p><strong>${value}</strong><span>${detail}</span></article>`).join("");
+  const weeklyActivity = [3, 2, 1, 0].map((offset) => {
+    const end = now - offset * 7 * 24 * 60 * 60 * 1000;
+    const start = end - 7 * 24 * 60 * 60 * 1000;
+    return tasks.filter((task) => {
+      const timestamp = new Date(task.completedAt || task.updatedAt || task.createdAt || 0).getTime();
+      return timestamp >= start && timestamp < end;
+    }).length;
+  });
+  const maxActivity = Math.max(...weeklyActivity, 1);
+  target.innerHTML = `
+    <article class="metric-card"><p class="eyebrow">任务完成情况</p><div class="stat-main"><div class="stat-gauge" style="--completion:${completionRate}%"><div><strong>${completionRate}%</strong><small>完成率</small></div></div><div class="stat-meta"><strong>${completed}</strong><span>已完成任务</span><span>${open} 项仍待推进</span></div></div><div class="stat-foot"><span>已完成 ${completed}</span><span>待处理 ${open}</span></div></article>
+    <article class="metric-card metric-card-types"><p class="eyebrow">任务类型</p><div class="type-summary"><div><strong>${leadShare}%</strong><span>${leadType.label}工作</span></div><div><strong>${tasks.length}</strong><span>累计任务</span></div></div><div class="type-bar" aria-label="任务类型占比">${typeLegend.map((item, index) => `<span class="type-segment-${index + 1}" style="width:${item.share}%"></span>`).join("")}</div><div class="type-list">${typeLegend.map((item, index) => `<div><i class="type-segment-${index + 1}"></i><span>${item.label}</span><strong>${item.share}%</strong></div>`).join("")}</div></article>
+    <article class="metric-card"><p class="eyebrow">你的活动</p><div class="stat-bars">${weeklyActivity.map((value, index) => `<span class="${index === weeklyActivity.length - 1 ? "active" : ""}" style="height:${Math.max(12, Math.round(value / maxActivity * 100))}%"><small>${index + 1}周</small></span>`).join("")}</div><div class="stat-foot"><span>所选周期</span><span>${weeklyActivity.reduce((sum, value) => sum + value, 0)} 次更新</span></div></article>`;
 }
 
 // Render one daily priority or risk item with its reason and next action.
@@ -278,8 +360,11 @@ function renderDailyBrief() {
   const summary = [[brief.summary.priorities, t("priorityCount")], [brief.summary.meetings, t("meetingCount")], [brief.summary.reply, t("replyCount")], [brief.summary.waiting, t("waitingCount")]];
   document.querySelector("#daily-brief-summary").innerHTML = isQuiet ? `<div class="brief-calm-summary"><i data-lucide="circle-check-big"></i><span>${t("quietDay")}</span></div>` : summary.map(([value, label]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join("");
   const syncCue = !brief.generatedAt ? `<p class="brief-empty sync-guidance"><span class="ann ann-s ann-blue" data-note="${t("startHere")}">${t("waitingSync")}</span><br />${t("waitingSync")}</p>` : `<p class="brief-empty">${t("noPriority")}</p>`;
-  document.querySelector("#daily-priority-list").innerHTML = brief.priorities.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "amber", note: t("startHere") } : null)).join("") || syncCue;
-  document.querySelector("#daily-meeting-list").innerHTML = brief.meetings.map(dailyBriefMeetingItem).join("") || `<p class="brief-empty">${t("noMeeting")}</p>`;
+  const priorityItems = brief.priorities.slice(0, 3);
+  const meetingItems = brief.meetings.slice(0, 3);
+  const morePriorities = brief.priorities.length > priorityItems.length ? `<button class="brief-more" data-go-to="today" type="button">查看全部 ${brief.priorities.length} 项 <i data-lucide="arrow-right"></i></button>` : "";
+  document.querySelector("#daily-priority-list").innerHTML = `${priorityItems.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "amber", note: t("startHere") } : null)).join("")}${morePriorities}` || syncCue;
+  document.querySelector("#daily-meeting-list").innerHTML = meetingItems.map(dailyBriefMeetingItem).join("") || `<p class="brief-empty">${t("noMeeting")}</p>`;
   document.querySelector("#daily-reply-list").innerHTML = brief.reply.map(dailyBriefReplyItem).join("") || `<p class="brief-empty">${t("noReply")}</p>`;
   document.querySelector("#daily-risk-list").innerHTML = brief.risks.map((task, index) => dailyBriefTaskItem(task, index === 0 ? { color: "red", note: t("checkDependency") } : null)).join("") || `<p class="brief-empty">${t("noRisk")}</p>`;
   const closeout = document.querySelector("#daily-closeout");
@@ -306,14 +391,31 @@ function renderPriorities() {
 // Render all local tasks using the selected filter.
 function renderAllTasks() {
   const tasks = visibleTasks();
-  const filtered = tasks.filter((task) => (taskFilter === "all" || (taskFilter === "open" ? task.status !== "done" : task.status === "done")) && (priorityFilter === "all" || task.priority === priorityFilter));
+  const query = taskSearch.trim().toLowerCase();
+  const filtered = tasks.filter((task) => (taskFilter === "all" || (taskFilter === "open" ? task.status !== "done" : task.status === "done")) && (priorityFilter === "all" || task.priority === priorityFilter) && matchesTaskRange(task) && (!query || `${task.title || ""} ${task.project || ""}`.toLowerCase().includes(query))).sort((left, right) => taskDueTime(left) - taskDueTime(right) || (left.status === "done") - (right.status === "done"));
   document.querySelector('[data-task-filter="all"]').textContent = `${t("all")} ${tasks.length}`;
   document.querySelector('[data-task-filter="open"]').textContent = `${t("open")} ${tasks.filter((task) => task.status !== "done").length}`;
   document.querySelector('[data-task-filter="done"]').textContent = `${t("done")} ${tasks.filter((task) => task.status === "done").length}`;
   document.querySelector('[data-priority-filter="all"]').textContent = t("allPriorities");
   ["high", "medium", "low"].forEach((priority) => { document.querySelector(`[data-priority-filter="${priority}"]`).textContent = t(priority); });
   document.querySelector("#task-list-count").textContent = newsLanguage === "en" ? `${filtered.length} items` : `${filtered.length} 项`;
-  document.querySelector("#all-task-list").innerHTML = filtered.map((task) => taskRow(task, task.source !== "lark-task" && task.source !== "feishu-project")).join("") || `<div class="empty-state"><i data-lucide="inbox"></i><span>${t("noTasks")}</span></div>`;
+  const list = document.querySelector("#all-task-list");
+  list.dataset.layout = taskLayout;
+  renderTaskRangeMenu();
+  document.querySelectorAll("[data-task-layout]").forEach((tab) => tab.classList.toggle("active", tab.dataset.taskLayout === taskLayout));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / taskPageSize));
+  taskPage = Math.min(taskPage, pageCount - 1);
+  const pageTasks = filtered.slice(taskPage * taskPageSize, (taskPage + 1) * taskPageSize);
+  const renderTask = (task) => taskRow(task, task.source !== "lark-task" && task.source !== "feishu-project");
+  if (taskLayout === "block") {
+    const buckets = new Map();
+    pageTasks.forEach((task) => { const bucket = taskTimeBucket(task); if (!buckets.has(bucket.key)) buckets.set(bucket.key, { ...bucket, tasks: [] }); buckets.get(bucket.key).tasks.push(task); });
+    list.innerHTML = [...buckets.values()].map((bucket) => `<section class="task-time-group task-time-${bucket.key}"><div class="task-time-heading"><span>${bucket.label}</span><small>${bucket.tasks.length} 项</small></div>${bucket.tasks.map(renderTask).join("")}</section>`).join("") || `<div class="empty-state"><i data-lucide="inbox"></i><span>${t("noTasks")}</span></div>`;
+  } else {
+    const tableHead = taskLayout === "table" && pageTasks.length ? `<div class="task-table-heading"><span></span><span>任务、项目与优先级</span><span>截止时间</span><span></span></div>` : "";
+    list.innerHTML = `${tableHead}${pageTasks.map(renderTask).join("")}` || `<div class="empty-state"><i data-lucide="inbox"></i><span>${t("noTasks")}</span></div>`;
+  }
+  document.querySelector("#task-pagination").innerHTML = filtered.length > taskPageSize ? `<span>显示 ${taskPage * taskPageSize + 1}-${Math.min((taskPage + 1) * taskPageSize, filtered.length)} / ${filtered.length}</span><div><button class="icon-button" data-task-page="${taskPage - 1}" ${taskPage === 0 ? "disabled" : ""} type="button" aria-label="上一页" title="上一页"><i data-lucide="arrow-left"></i></button><button class="icon-button" data-task-page="${taskPage + 1}" ${taskPage >= pageCount - 1 ? "disabled" : ""} type="button" aria-label="下一页" title="下一页"><i data-lucide="arrow-right"></i></button></div>` : "";
 }
 
 // Render Project work as business themes rather than the broad source project name.
@@ -346,12 +448,13 @@ function renderRhythm() {
 
 // Render project tasks grouped into planning columns.
 function renderKanban() {
-  const columns = [["todo", t("todo")], ["progress", t("progress")], ["review", t("review")], ["done", t("done")]];
-  document.querySelector("#kanban-board").innerHTML = columns.map(([status, label]) => {
-    const order = { high: 0, medium: 1, low: 2 };
-    const tasks = visibleTasks().filter((task) => task.status === status).sort((left, right) => order[left.priority] - order[right.priority] || new Date(left.dueAt || 0) - new Date(right.dueAt || 0));
-    return `<section class="kanban-column"><div class="kanban-heading"><span>${label}</span><span class="kanban-count">${tasks.length}</span></div>${tasks.map((task) => `<article class="kanban-card" style="--task-color:${priorityColor(task.priority)}"><h3 title="${escapeHtml(task.title)}">${escapeHtml(task.displayTitle)}</h3><p>${escapeHtml(task.project || t("noProject"))} · ${escapeHtml(formatDate(task.dueAt || task.due))}</p><div class="kanban-footer"><span class="status-chip ${task.priority === "high" ? "orange" : "pale"}">${t(task.priority)}</span>${task.source === "lark-task" || task.source === "feishu-project" ? `<span class="status-chip pale" title="${escapeHtml(t("feishuSyncedHint"))}">${t("feishuSynced")}</span>` : `<select class="status-select" data-status-task="${escapeHtml(task.id)}" aria-label="${escapeHtml(task.title)}"><option value="todo" ${task.status === "todo" ? "selected" : ""}>${t("todo")}</option><option value="progress" ${task.status === "progress" ? "selected" : ""}>${t("progress")}</option><option value="review" ${task.status === "review" ? "selected" : ""}>${t("review")}</option><option value="done" ${task.status === "done" ? "selected" : ""}>${t("done")}</option></select>`}</div></article>`).join("") || `<p class="column-empty">${t("noColumnTasks")}</p>`}</section>`;
-  }).join("");
+  const groups = currentWorkGroups();
+  const allTasks = visibleTasks();
+  const doneCount = allTasks.filter((task) => task.status === "done").length;
+  const activeCount = allTasks.length - doneCount;
+  const overdueCount = allTasks.filter((task) => task.status !== "done" && taskDueTime(task) && taskDueTime(task) < Date.now()).length;
+  const milestoneLabel = (group) => group.progress >= 90 ? "交付与复盘" : group.progress >= 60 ? "联调与验证" : group.progress >= 25 ? "方案推进" : "明确下一步";
+  document.querySelector("#kanban-board").innerHTML = `<section class="delivery-summary"><div><span>进行中</span><strong>${activeCount}</strong><small>需要推进的任务</small></div><div><span>交付风险</span><strong>${overdueCount}</strong><small>已逾期或需要确认</small></div><div><span>已完成</span><strong>${doneCount}</strong><small>历史工作已收纳</small></div></section><section class="delivery-grid">${groups.map((group) => `<button class="delivery-card" data-project-group="${escapeHtml(group.name)}" type="button" style="--project-color:${group.color}"><div class="delivery-card-top"><span class="status-chip pale">${group.active} 项进行中</span><strong>${group.progress}%</strong></div><h3>${escapeHtml(group.name)}</h3><p class="delivery-milestone"><i data-lucide="flag"></i>${milestoneLabel(group)}</p><div class="delivery-track" aria-label="${escapeHtml(group.name)} 进度"><span style="width:${group.progress}%"></span></div><div class="delivery-next"><span>下一步</span><strong title="${escapeHtml(group.preview?.title || "")}">${escapeHtml(taskDisplayTitle(group.preview || {}))}</strong></div><div class="delivery-steps"><span class="${group.progress >= 10 ? "done" : ""}">准备</span><span class="${group.progress >= 35 ? "done" : ""}">推进</span><span class="${group.progress >= 65 ? "done" : ""}">验证</span><span class="${group.progress >= 90 ? "done" : ""}">交付</span></div></button>`).join("") || `<div class="empty-state"><i data-lucide="folder-open"></i><span>${t("noCurrentProject")}</span></div>`}</section><details class="completed-work"><summary>已完成工作 <span>${doneCount}</span></summary><p>已完成事项已从主要交付视图收纳，避免干扰当前决策。</p></details>`;
 }
 
 // Render task choices for the focus session.
@@ -364,6 +467,8 @@ function renderFocusOptions() {
   document.querySelector("#focus-pagination").innerHTML = pages > 1 ? `<button class="icon-button" data-focus-page="${focusPage - 1}" ${focusPage === 0 ? "disabled" : ""} type="button" aria-label="上一页" title="上一页"><i data-lucide="arrow-left"></i></button><span>${focusPage + 1} / ${pages}</span><button class="icon-button" data-focus-page="${focusPage + 1}" ${focusPage === pages - 1 ? "disabled" : ""} type="button" aria-label="下一页" title="下一页"><i data-lucide="arrow-right"></i></button>` : "";
   const selected = visibleTasks().find((task) => task.id === data.selectedTaskId);
   document.querySelector("#timer-task").textContent = selected ? selected.title : t("selectTask");
+  document.querySelectorAll("[data-focus-duration]").forEach((button) => button.classList.toggle("active", Number(button.dataset.focusDuration) === focusDuration));
+  document.querySelector("#focus-round").textContent = `第 ${Math.floor(data.focusMinutes / focusDuration) + 1} 轮 · ${focusDuration} 分钟`;
 }
 
 // Render source connection cards from the local context snapshot.
@@ -431,6 +536,13 @@ function editorialSummary(value, variant) { const limit = variant === "lead" ? 2
 // Estimate card height so the two supporting columns stay balanced without forced empty space.
 function storyWeight(item) { const title = cleanNewsCopy(item.title || "").length; const summary = cleanNewsCopy(item.summary || "").length; return 1 + title / 38 + summary / 95; }
 
+// Approximate the rendered editorial height before assigning stories to newspaper columns.
+function storyLayoutWeight(item, variant = "secondary") {
+  const title = cleanNewsCopy(newsLanguage === "en" ? (item.originalTitle || item.title) : item.title).length;
+  const summary = editorialSummary(newsLanguage === "en" ? (item.originalSummary || item.summary) : item.summary, variant).length;
+  return variant === "lead" ? 150 + title * 1.9 + summary * 0.75 : 110 + title * 1.6 + summary * 0.68;
+}
+
 // Render a single editorial story with market, topic, importance, and a variable text shape.
 function newspaperStory(item, variant = "brief") {
   const title = cleanNewsCopy(newsLanguage === "en" ? (item.originalTitle || item.title) : item.title);
@@ -447,15 +559,34 @@ function newspaperStory(item, variant = "brief") {
 
 // Distribute every story by estimated length so the lead column does not leave a blank tail.
 function renderNewspaperColumns(pageItems) {
-  const columns = [[], [], []];
-  const heights = [0, 0, 0];
-  pageItems.forEach((item, index) => {
-    // Seed every column and place one supporting story under the lead before balancing by content length.
-    const target = index < 4 ? [0, 1, 2, 0][index] : heights.indexOf(Math.min(...heights));
-    columns[target].push({ item, variant: index === 0 ? "lead" : "secondary" });
-    heights[target] += storyWeight(item);
-  });
-  return `<div class="newspaper-grid">${columns.map((column, index) => `<div class="${index === 0 ? "newspaper-lead-column" : "newspaper-column"}">${column.map(({ item, variant }) => newspaperStory(item, variant)).join("")}</div>`).join("")}</div>`;
+  const lead = pageItems[0];
+  const support = pageItems.slice(1);
+  const initialColumns = lead ? [[{ item: lead, variant: "lead" }], [], []] : [[], [], []];
+  const initialHeights = [lead ? storyLayoutWeight(lead, "lead") : 0, 0, 0];
+  let best = { columns: initialColumns, score: Number.POSITIVE_INFINITY };
+
+  // With a small fixed page size, evaluate every safe placement instead of accepting a visibly uneven greedy result.
+  function placeStory(index, columns, heights) {
+    if (index === support.length) {
+      const counts = columns.map((column) => column.length);
+      if (support.length >= 5 && Math.min(...counts) < 2) return;
+      const spread = Math.max(...heights) - Math.min(...heights);
+      const countSpread = Math.max(...counts) - Math.min(...counts);
+      const score = spread + countSpread * 35;
+      if (score < best.score) best = { columns, score };
+      return;
+    }
+    const item = support[index];
+    const weight = storyLayoutWeight(item);
+    for (let target = 0; target < 3; target += 1) {
+      const nextColumns = columns.map((column, columnIndex) => columnIndex === target ? [...column, { item, variant: "secondary" }] : column);
+      const nextHeights = heights.map((height, columnIndex) => columnIndex === target ? height + weight : height);
+      placeStory(index + 1, nextColumns, nextHeights);
+    }
+  }
+
+  placeStory(0, initialColumns, initialHeights);
+  return `<div class="newspaper-grid">${best.columns.map((column, index) => `<div class="${index === 0 ? "newspaper-lead-column" : "newspaper-column"}">${column.map(({ item, variant }) => newspaperStory(item, variant)).join("")}</div>`).join("")}</div>`;
 }
 
 // Render the current newspaper page with independent columns and no source-based layout.
@@ -485,16 +616,15 @@ function renderInterfaceLanguage() {
   updateThemeControl(copy);
 }
 
-// Update the theme button to describe the change it will make.
-function updateThemeControl(copy = null) {
+// Update the focus-mode button to describe the change it will make.
+function updateThemeControl() {
   const button = document.querySelector("#theme-toggle");
   if (!button) return;
-  const labels = copy || (newsLanguage === "en" ? { darkMode: "Switch to dark mode", lightMode: "Switch to light mode" } : { darkMode: "切换深色模式", lightMode: "切换明亮模式" });
-  const isDark = document.body.classList.contains("dark");
-  const label = isDark ? labels.lightMode : labels.darkMode;
+  const focused = document.body.classList.contains("focus-mode");
+  const label = focused ? (newsLanguage === "en" ? "Exit focus mode" : "退出专注模式") : (newsLanguage === "en" ? "Enter focus mode" : "进入专注模式");
   button.setAttribute("aria-label", label);
   button.title = label;
-  button.innerHTML = `<i data-lucide="${isDark ? "sun" : "moon"}"></i>`;
+  button.innerHTML = `<i data-lucide="${focused ? "minimize-2" : "maximize-2"}"></i>`;
 }
 
 // Switch the visible application language and refresh language-sensitive content.
@@ -509,10 +639,10 @@ function setNewsLanguage(language) {
   lucide.createIcons();
 }
 
-// Apply and persist the selected visual theme.
-function applyTheme(theme) {
-  document.body.classList.toggle("dark", theme === "dark");
-  localStorage.setItem("jessboard-theme", theme);
+// Toggle the low-distraction view while keeping all work data available.
+function setFocusMode(enabled) {
+  document.body.classList.toggle("focus-mode", enabled);
+  localStorage.setItem("jessboard-focus-mode", enabled ? "on" : "off");
   updateThemeControl();
   lucide.createIcons();
 }
@@ -604,6 +734,7 @@ function renderLocalCommits(local) {
 // Render the Codex, GitHub, and local workspace development dashboard.
 function renderDevMetrics() {
   if (!devMetrics) return;
+  document.querySelector("#dev-view").classList.remove("is-loading", "is-unavailable");
   const codex = devMetrics.codex || {};
   const tokens = codex.tokenUsage || {};
   const github = devMetrics.github || {};
@@ -631,6 +762,8 @@ function renderDevMetrics() {
   renderDevList("#dev-tools", codex.tools, "尚未识别到工具调用");
   document.querySelector("#github-state").textContent = github.state === "fallback" ? "本机补充" : github.state === "ready" ? `@${github.username}` : "不可用";
   document.querySelector("#github-state").className = `status-chip ${githubAvailable ? "blue" : "orange"}`;
+  document.querySelector("#github-scope-note").textContent = github.username ? `仅显示 @${github.username} 的公开 Push Events；qbtrade 等私有组织、其他账号或本机目录外的提交不会出现在这里。` : "仅显示公开事件流可识别的提交；私有组织、其他账号或本机目录外的提交不会出现。";
+  document.querySelector("#local-scope-note").textContent = "仅扫描当前 src 工作区内已发现的仓库；其它本机目录需要接入后才会统计。";
   document.querySelector("#github-summary").innerHTML = [["提交", github.commitCount], ["新增行", github.additions], ["删除行", github.deletions]].map(([label, value]) => `<div><strong>${githubAvailable ? compactNumber(value) : "--"}</strong><span>${label}</span></div>`).join("");
   renderDevCommits("#github-commits", github.commits, githubAvailable ? "最近没有提交" : github.detail || "GitHub 公共活动暂不可用");
   document.querySelector("#local-repository-count").textContent = `${local.repositoryCount || 0} 个仓库`;
@@ -640,10 +773,21 @@ function renderDevMetrics() {
   document.querySelector("#dev-notice").innerHTML = `<i data-lucide="shield-check"></i><span>${escapeHtml(quotaNote)}；显示会话标题预览，不显示凭证或代码内容。</span>`;
 }
 
+// Keep development analytics informative while local records are loading or unavailable.
+function renderDevState(state, detail = "") {
+  const view = document.querySelector("#dev-view");
+  view.classList.toggle("is-loading", state === "loading");
+  view.classList.toggle("is-unavailable", state === "unavailable");
+  const target = document.querySelector("#dev-metric-grid");
+  if (state === "loading") target.innerHTML = Array.from({ length: 3 }, () => `<article class="dev-metric dev-skeleton"><span></span><strong></strong><i></i></article>`).join("");
+  if (state === "unavailable") target.innerHTML = `<article class="dev-state-card"><i data-lucide="chart-no-axes-combined"></i><div><strong>开发数据暂不可用</strong><span>${escapeHtml(detail || "请稍后刷新本机记录。")}</span></div></article>`;
+}
+
 // Fetch fresh development metrics from the local service on demand.
 async function loadDevMetrics() {
   if (devMetricsLoading) return;
   devMetricsLoading = true;
+  renderDevState("loading");
   const button = document.querySelector("#refresh-dev-metrics");
   button.disabled = true;
   button.innerHTML = "<i data-lucide=\"loader-circle\" class=\"spin\"></i>刷新中";
@@ -655,6 +799,7 @@ async function loadDevMetrics() {
     document.querySelector("#dev-updated").textContent = `更新于 ${formatDate(devMetrics.fetchedAt, true)}`;
     renderDevMetrics();
   } catch (error) {
+    renderDevState("unavailable", "当前无法读取本机聚合指标，请确认服务已启动后重试。");
     document.querySelector("#dev-notice").innerHTML = `<i data-lucide="triangle-alert"></i><span>开发统计暂不可用：${escapeHtml(error.message)}。请确认本机服务已启动。</span>`;
   } finally {
     devMetricsLoading = false;
@@ -723,14 +868,28 @@ async function refreshNews() {
 }
 
 // Rebuild every dynamic section after local changes.
-function renderApp() { renderDailyBrief(); renderPriorities(); renderAllTasks(); renderProjects(); renderKanban(); renderFocusOptions(); renderSourceStatus(); lucide.createIcons(); }
+function renderApp() { renderDailyBrief(); renderInsights(); renderPriorities(); renderAllTasks(); renderProjects(); renderKanban(); renderFocusOptions(); renderSourceStatus(); lucide.createIcons(); }
 
 // Switch between views without leaving the single-page workbench.
 function setView(view) {
   document.querySelectorAll("[data-view-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.viewPanel === view));
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   document.querySelector("#open-task-dialog").classList.toggle("is-hidden", !["dashboard", "today", "projects"].includes(view));
+  if (view === "dev" && !devMetrics && !devMetricsLoading) loadDevMetrics();
+  updatePageHeader(view);
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Keep the compact toolbar title aligned with the active workspace view.
+function updatePageHeader(view) {
+  const copy = newsLanguage === "en" ? {
+    dashboard: ["Today", "Jessboard"], today: ["This week", "My tasks"], projects: ["Delivery rhythm", "Project schedule"], focus: ["Focus session", "One thing at a time"], dev: ["Development data", "Development analysis"], news: ["Daily edition", "JessDaily"]
+  } : {
+    dashboard: ["今天", "Jessboard"], today: ["本周", "我的任务"], projects: ["交付节奏", "项目排期"], focus: ["专注时段", "一次只做一件事"], dev: ["开发数据", "开发分析"], news: ["每日版", "Jess日报"]
+  };
+  const [kicker] = copy[view] || copy.dashboard;
+  document.querySelector("#page-kicker").textContent = kicker;
+  document.querySelector("#page-title").textContent = "Jessboard";
 }
 
 // Add a new local task from the dialog form.
@@ -739,14 +898,14 @@ function addTask(event) {
   const form = new FormData(event.currentTarget);
   const dueDate = form.get("due");
   const project = form.get("project") || "未归类";
-  const task = { id: `task-${Date.now()}`, title: form.get("title").trim(), project, priority: form.get("priority"), status: form.get("status"), due: dueDate ? formatDate(`${dueDate}T00:00:00`) : "暂无日期" };
+  const task = { id: `task-${Date.now()}`, title: form.get("title").trim(), project, workType: form.get("workType"), priority: form.get("priority"), status: form.get("status"), due: dueDate ? formatDate(`${dueDate}T00:00:00`) : "暂无日期", createdAt: new Date().toISOString(), completedAt: form.get("status") === "done" ? new Date().toISOString() : null };
   data.tasks.unshift(task);
   data.selectedTaskId ||= task.id;
   saveData(); renderApp(); event.currentTarget.reset(); document.querySelector("#task-dialog").close(); setView("today");
 }
 
 // Switch a task between complete and planned.
-function toggleTask(id) { const task = data.tasks.find((item) => item.id === id); if (!task) return; task.status = task.status === "done" ? "todo" : "done"; saveData(); renderApp(); }
+function toggleTask(id) { const task = data.tasks.find((item) => item.id === id); if (!task) return; task.status = task.status === "done" ? "todo" : "done"; task.completedAt = task.status === "done" ? new Date().toISOString() : null; task.updatedAt = new Date().toISOString(); saveData(); renderApp(); }
 
 // Delete a task after the user selects its delete control.
 function deleteTask(id) { data.tasks = data.tasks.filter((task) => task.id !== id); if (data.selectedTaskId === id) data.selectedTaskId = data.tasks[0]?.id || null; saveData(); renderApp(); }
@@ -756,7 +915,7 @@ function addBriefMessageTask(id) {
   const message = (contextData.feishu?.messages || []).find((item) => item.id === id);
   if (!message || data.tasks.some((task) => task.originMessageId === id)) return;
   const title = `回复：${taskDisplayTitle({ title: message.chat || message.preview })}`;
-  const task = { id: `message-task-${Date.now()}`, title, project: "飞书消息", priority: "medium", status: "todo", due: "暂无日期", source: "message-confirmed", link: message.link, originMessageId: id };
+  const task = { id: `message-task-${Date.now()}`, title, project: "飞书消息", workType: "communication", priority: "medium", status: "todo", due: "暂无日期", createdAt: new Date().toISOString(), source: "message-confirmed", link: message.link, originMessageId: id };
   data.tasks.unshift(task);
   data.selectedTaskId ||= task.id;
   dismissedBriefMessages.add(id);
@@ -769,17 +928,40 @@ function addBriefMessageTask(id) {
 function dismissBriefMessage(id) { dismissedBriefMessages.add(id); saveDismissedBriefMessages(); renderDailyBrief(); lucide.createIcons(); }
 
 // Move a task to a new board state.
-function changeTaskStatus(id, status) { const task = data.tasks.find((item) => item.id === id); if (!task) return; task.status = status; saveData(); renderApp(); }
+function changeTaskStatus(id, status) { const task = data.tasks.find((item) => item.id === id); if (!task) return; task.status = status; task.completedAt = status === "done" ? new Date().toISOString() : null; task.updatedAt = new Date().toISOString(); saveData(); renderApp(); }
 
 // Display the focus timer in minutes and seconds.
 function renderTimer() { document.querySelector("#timer-display").textContent = `${String(Math.floor(timerSeconds / 60)).padStart(2, "0")}:${String(timerSeconds % 60).padStart(2, "0")}`; }
+
+// Select a practical focus interval and reset the current countdown.
+function setFocusDuration(minutes) {
+  focusDuration = Number(minutes) || 25;
+  localStorage.setItem("jessboard-focus-duration", String(focusDuration));
+  if (timerId) { clearInterval(timerId); timerId = null; document.querySelector("#timer-start").innerHTML = "<i data-lucide=\"play\"></i>开始专注"; }
+  timerSeconds = focusDuration * 60;
+  renderTimer();
+  renderFocusOptions();
+  lucide.createIcons();
+}
+
+// Move to the next open task without changing its completion state.
+function skipFocusTask() {
+  const active = visibleTasks().filter((task) => task.status !== "done");
+  const currentIndex = active.findIndex((task) => task.id === data.selectedTaskId);
+  const next = active[(currentIndex + 1) % active.length];
+  if (!next) return;
+  data.selectedTaskId = next.id;
+  saveData();
+  renderFocusOptions();
+  lucide.createIcons();
+}
 
 // Start or pause a single focus countdown.
 function toggleTimer() {
   const button = document.querySelector("#timer-start");
   if (timerId) { clearInterval(timerId); timerId = null; button.innerHTML = "<i data-lucide=\"play\"></i>继续专注"; lucide.createIcons(); return; }
   button.innerHTML = "<i data-lucide=\"pause\"></i>暂停专注"; lucide.createIcons();
-  timerId = window.setInterval(() => { timerSeconds -= 1; renderTimer(); if (timerSeconds <= 0) { clearInterval(timerId); timerId = null; timerSeconds = 25 * 60; data.focusMinutes += 25; saveData(); renderApp(); renderTimer(); button.innerHTML = "<i data-lucide=\"play\"></i>开始专注"; lucide.createIcons(); } }, 1000);
+  timerId = window.setInterval(() => { timerSeconds -= 1; renderTimer(); if (timerSeconds <= 0) { clearInterval(timerId); timerId = null; timerSeconds = focusDuration * 60; data.focusMinutes += focusDuration; saveData(); renderApp(); renderTimer(); button.innerHTML = "<i data-lucide=\"play\"></i>开始专注"; lucide.createIcons(); } }, 1000);
 }
 
 // Populate the project choice field from the active local project list.
@@ -806,7 +988,7 @@ function toggleSidebar() {
 // Wire shared controls, filters, navigation, and dialogs.
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const toggle = event.target.closest("[data-toggle-task]"); const deletion = event.target.closest("[data-delete-task]"); const messageTask = event.target.closest("[data-add-message-task]"); const messageDismiss = event.target.closest("[data-dismiss-message]"); const choice = event.target.closest("[data-focus-task]"); const navigation = event.target.closest("[data-view], [data-go-to]"); const taskTab = event.target.closest("[data-task-filter]"); const priorityTab = event.target.closest("[data-priority-filter]"); const projectCard = event.target.closest("[data-project-group]"); const newsTab = event.target.closest("[data-news-filter]"); const languageTab = event.target.closest("[data-news-language]"); const sidebarToggle = event.target.closest("#sidebar-toggle"); const focusPager = event.target.closest("[data-focus-page]"); const localPager = event.target.closest("[data-local-page]");
+    const toggle = event.target.closest("[data-toggle-task]"); const deletion = event.target.closest("[data-delete-task]"); const messageTask = event.target.closest("[data-add-message-task]"); const messageDismiss = event.target.closest("[data-dismiss-message]"); const choice = event.target.closest("[data-focus-task]"); const navigation = event.target.closest("[data-view], [data-go-to]"); const taskTab = event.target.closest("[data-task-filter]"); const priorityTab = event.target.closest("[data-priority-filter]"); const taskLayoutTab = event.target.closest("[data-task-layout]"); const taskPageControl = event.target.closest("[data-task-page]"); const taskRangeTrigger = event.target.closest("#task-range-trigger"); const taskRangeOption = event.target.closest("[data-task-range]"); const taskRangeMenu = event.target.closest("#task-range-menu"); const projectCard = event.target.closest("[data-project-group]"); const newsTab = event.target.closest("[data-news-filter]"); const languageTab = event.target.closest("[data-news-language]"); const sidebarToggle = event.target.closest("#sidebar-toggle"); const focusPager = event.target.closest("[data-focus-page]"); const focusDurationButton = event.target.closest("[data-focus-duration]"); const localPager = event.target.closest("[data-local-page]");
     if (toggle) toggleTask(toggle.dataset.toggleTask);
     if (deletion) deleteTask(deletion.dataset.deleteTask);
     if (messageTask) addBriefMessageTask(messageTask.dataset.addMessageTask);
@@ -815,11 +997,17 @@ function bindEvents() {
     if (navigation) setView(navigation.dataset.view || navigation.dataset.goTo);
     if (taskTab) { taskFilter = taskTab.dataset.taskFilter; document.querySelectorAll("[data-task-filter]").forEach((tab) => tab.classList.toggle("active", tab === taskTab)); renderAllTasks(); lucide.createIcons(); }
     if (priorityTab) { priorityFilter = priorityTab.dataset.priorityFilter; document.querySelectorAll("[data-priority-filter]").forEach((tab) => tab.classList.toggle("active", tab === priorityTab)); renderAllTasks(); lucide.createIcons(); }
+    if (taskLayoutTab) { taskLayout = taskLayoutTab.dataset.taskLayout; taskPage = 0; localStorage.setItem("jessboard-task-layout", taskLayout); renderAllTasks(); lucide.createIcons(); }
+    if (taskPageControl) { taskPage = Number(taskPageControl.dataset.taskPage); renderAllTasks(); lucide.createIcons(); }
+    if (taskRangeTrigger) { const menu = document.querySelector("#task-range-menu"); const open = menu.classList.toggle("open"); taskRangeTrigger.setAttribute("aria-expanded", String(open)); }
+    if (taskRangeOption) { taskRange = taskRangeOption.dataset.taskRange; taskPage = 0; localStorage.setItem("jessboard-task-range", taskRange); renderAllTasks(); lucide.createIcons(); }
+    if (!taskRangeMenu) { const menu = document.querySelector("#task-range-menu"); const trigger = document.querySelector("#task-range-trigger"); menu?.classList.remove("open"); trigger?.setAttribute("aria-expanded", "false"); }
     if (projectCard) openProjectDialog(projectCard.dataset.projectGroup);
     if (newsTab) { newsFilter = newsTab.dataset.newsFilter; newsPage = 0; document.querySelectorAll("[data-news-filter]").forEach((tab) => tab.classList.toggle("active", tab === newsTab)); renderNews(); lucide.createIcons(); }
     if (languageTab) setNewsLanguage(languageTab.dataset.newsLanguage);
     if (sidebarToggle) toggleSidebar();
     if (focusPager) { focusPage = Number(focusPager.dataset.focusPage); renderFocusOptions(); lucide.createIcons(); }
+    if (focusDurationButton) setFocusDuration(focusDurationButton.dataset.focusDuration);
     if (localPager) { localCommitPage = Number(localPager.dataset.localPage); renderDevMetrics(); lucide.createIcons(); }
   });
   document.addEventListener("change", (event) => { if (event.target.matches("[data-status-task]")) changeTaskStatus(event.target.dataset.statusTask, event.target.value); });
@@ -827,10 +1015,12 @@ function bindEvents() {
   document.querySelector("#close-task-dialog").addEventListener("click", () => document.querySelector("#task-dialog").close());
   document.querySelector("#cancel-task-dialog").addEventListener("click", () => document.querySelector("#task-dialog").close());
   document.querySelector("#task-form").addEventListener("submit", addTask);
-  document.querySelector("#clear-completed").addEventListener("click", () => { data.tasks = data.tasks.filter((task) => task.status !== "done"); saveData(); renderApp(); });
+  document.querySelector("#clear-completed").addEventListener("click", () => { if (!window.confirm("确定清除本机已完成任务吗？该操作不会影响飞书来源。")) return; data.tasks = data.tasks.filter((task) => task.status !== "done"); saveData(); renderApp(); });
   document.querySelector("#timer-start").addEventListener("click", toggleTimer);
-  document.querySelector("#timer-reset").addEventListener("click", () => { timerSeconds = 25 * 60; renderTimer(); });
-  document.querySelector("#theme-toggle").addEventListener("click", () => applyTheme(document.body.classList.contains("dark") ? "light" : "dark"));
+  document.querySelector("#timer-skip").addEventListener("click", skipFocusTask);
+  document.querySelector("#timer-reset").addEventListener("click", () => { timerSeconds = focusDuration * 60; renderTimer(); });
+  document.querySelector("#theme-toggle").addEventListener("click", () => setFocusMode(!document.body.classList.contains("focus-mode")));
+  document.querySelector("#task-search").addEventListener("input", (event) => { taskSearch = event.target.value; renderAllTasks(); lucide.createIcons(); });
   document.querySelector("#close-project-dialog").addEventListener("click", () => document.querySelector("#project-dialog").close());
   document.querySelector("#refresh-news").addEventListener("click", refreshNews);
   document.querySelector("#refresh-dev-metrics").addEventListener("click", loadDevMetrics);
@@ -840,13 +1030,13 @@ function bindEvents() {
   document.querySelector("#news-next").addEventListener("click", () => { const pageCount = Math.max(1, Math.ceil(sortedNewsItems().length / newsPageSize)); if (newsPage < pageCount - 1) { newsPage += 1; renderNews(); lucide.createIcons(); } });
 }
 
-// Choose one stable quote for the current calendar day.
-function renderDailyQuote(now) { const quotes = [{ zh: "未来取决于你今天的行动。", en: "The future depends on what you do today.", author: "Mahatma Gandhi" }, { zh: "好的开始是成功的一半。", en: "Well begun is half done.", author: "Aristotle" }, { zh: "行动是一切成功的根本钥匙。", en: "Action is the foundational key to all success.", author: "Pablo Picasso" }, { zh: "除非你动手，否则什么也不会发生。", en: "Nothing will work unless you do.", author: "Maya Angelou" }, { zh: "领先的秘诀，是开始行动。", en: "The secret of getting ahead is getting started.", author: "Mark Twain" }, { zh: "做伟大工作的唯一方法，是热爱所做的事。", en: "The only way to do great work is to love what you do.", author: "Steve Jobs" }, { zh: "简洁是终极的复杂。", en: "Simplicity is the ultimate sophistication.", author: "Leonardo da Vinci" }]; const quote = quotes[Math.floor(now.getTime() / 86400000) % quotes.length]; document.querySelector("#page-title").textContent = quote[newsLanguage]; document.querySelector("#quote-author").textContent = `- ${quote.author}`; }
+// Keep the toolbar focused on the active workspace instead of a decorative quote.
+function renderDailyQuote() { updatePageHeader(document.querySelector("[data-view-panel].active")?.dataset.viewPanel || "dashboard"); }
 
 // Set the current date labels in the Chinese locale.
 function renderToday() { const now = new Date(); const locale = newsLanguage === "en" ? "en-US" : "zh-CN"; const todayDate = document.querySelector("#today-date"); document.querySelector("#page-kicker").textContent = new Intl.DateTimeFormat(locale, { weekday: "long", month: "long", day: "numeric" }).format(now); if (todayDate) todayDate.textContent = new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(now); document.querySelector("#news-edition-date").textContent = new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(now); renderDailyQuote(now); }
 
-applyTheme(localStorage.getItem("jessboard-theme") === "light" ? "light" : "dark");
+setFocusMode(localStorage.getItem("jessboard-focus-mode") === "on");
 if (localStorage.getItem("jessboard-sidebar") === "collapsed") document.body.classList.add("sidebar-collapsed");
 updateSidebarToggle();
 document.querySelector("#dev-range").value = devRange;
