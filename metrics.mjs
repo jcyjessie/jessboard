@@ -1,4 +1,4 @@
-// Development analytics: aggregate local Codex session records and public GitHub activity without exposing private content.
+// Development analytics: aggregate local Codex session records and configured GitHub commit metadata without exposing private content.
 import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import path from "node:path";
@@ -88,6 +88,12 @@ function sumTokenUsage(sessions) {
   }, {});
 }
 
+// Prefer the recorded total and fall back to visible input and output counters when older sessions omit it.
+function tokenTotal(usage = {}) {
+  const total = Number(usage.total_tokens || 0);
+  return total || Number(usage.input_tokens || 0) + Number(usage.output_tokens || 0);
+}
+
 // Classify one session from its recorded skill activity without reading conversation content.
 function classifySessionScenario(session) {
   const skills = Object.entries(session.skills || {});
@@ -124,9 +130,19 @@ export async function loadCodexSessionSummaries() {
     .sort((left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0));
 }
 
+// Create the minimal headers needed for public or explicitly authorized GitHub reads.
+function githubHeaders(token = "") {
+  return { "user-agent": "jessboard-development-metrics/0.1", accept: "application/vnd.github+json", ...(token ? { authorization: `Bearer ${token}` } : {}) };
+}
+
+// Parse the opt-in private repository allowlist from the local service environment.
+function configuredPrivateRepositories() {
+  return [...new Set(String(process.env.JESSBOARD_GITHUB_PRIVATE_REPOSITORIES || "").split(",").map((name) => name.trim()).filter((name) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(name)))];
+}
+
 // Read recent public GitHub events and commit statistics for the configured account.
 async function loadGithubMetrics(username) {
-  const headers = { "user-agent": "jessboard-development-metrics/0.1", accept: "application/vnd.github+json" };
+  const headers = githubHeaders();
   const response = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/events/public?per_page=100`, { headers });
   if (!response.ok) throw new Error(`GitHub 公共活动 HTTP ${response.status}`);
   const events = await response.json();
@@ -159,13 +175,53 @@ async function loadGithubMetrics(username) {
     return { repo: commit.repo, sha: commit.sha, message: commit.message, date: detail.commit?.author?.date || commit.date, additions: Number(detail.stats?.additions || 0), deletions: Number(detail.stats?.deletions || 0), files: Array.isArray(detail.files) ? detail.files.length : 0, url: detail.html_url };
   }));
   const commitStats = details.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
-  return { state: "ready", username, fetchedAt: new Date().toISOString(), eventCount: events.length, eventTypes: counts, commitCount: uniqueCommits.length, additions: commitStats.reduce((sum, entry) => sum + entry.additions, 0), deletions: commitStats.reduce((sum, entry) => sum + entry.deletions, 0), files: commitStats.reduce((sum, entry) => sum + entry.files, 0), commits: commitStats.slice(0, 8) };
+  return { state: "ready", username, fetchedAt: new Date().toISOString(), eventCount: events.length, eventTypes: counts, commitCount: uniqueCommits.length, additions: commitStats.reduce((sum, entry) => sum + entry.additions, 0), deletions: commitStats.reduce((sum, entry) => sum + entry.deletions, 0), files: commitStats.reduce((sum, entry) => sum + entry.files, 0), commits: commitStats.slice(0, 24).map((commit) => ({ ...commit, source: "public" })) };
+}
+
+// Read commit metadata from an explicit private repository allowlist.
+async function loadPrivateGithubMetrics(username) {
+  const repositories = configuredPrivateRepositories();
+  const token = String(process.env.JESSBOARD_GITHUB_TOKEN || "").trim();
+  if (!repositories.length) return { state: "disabled", repositoryCount: 0, commitCount: 0, additions: 0, deletions: 0, files: 0, commits: [] };
+  if (!token) return { state: "needs-token", repositoryCount: repositories.length, commitCount: 0, additions: 0, deletions: 0, files: 0, commits: [] };
+  const headers = githubHeaders(token);
+  const results = await Promise.allSettled(repositories.map(async (repository) => {
+    const response = await fetch(`https://api.github.com/repos/${repository}/commits?author=${encodeURIComponent(username)}&per_page=30`, { headers });
+    if (!response.ok) throw new Error(`${repository} HTTP ${response.status}`);
+    const commits = await response.json();
+    return (Array.isArray(commits) ? commits : []).map((commit) => ({ repo: repository, sha: commit.sha, message: commit.commit?.message || "未命名提交", date: commit.commit?.author?.date || "", url: commit.html_url || "", source: "private" }));
+  }));
+  const commits = results.flatMap((result) => result.status === "fulfilled" ? result.value : []).slice(0, 24);
+  const details = await Promise.allSettled(commits.map(async (commit) => {
+    const response = await fetch(`https://api.github.com/repos/${commit.repo}/commits/${commit.sha}`, { headers });
+    if (!response.ok) return null;
+    const detail = await response.json();
+    return { ...commit, date: detail.commit?.author?.date || commit.date, additions: Number(detail.stats?.additions || 0), deletions: Number(detail.stats?.deletions || 0), files: Array.isArray(detail.files) ? detail.files.length : 0, url: detail.html_url || commit.url };
+  }));
+  const commitStats = details.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
+  const failedRepositories = results.filter((result) => result.status === "rejected").length;
+  return { state: failedRepositories ? "partial" : "ready", repositoryCount: repositories.length, availableRepositoryCount: repositories.length - failedRepositories, commitCount: commitStats.length, additions: commitStats.reduce((sum, entry) => sum + entry.additions, 0), deletions: commitStats.reduce((sum, entry) => sum + entry.deletions, 0), files: commitStats.reduce((sum, entry) => sum + entry.files, 0), commits: commitStats.slice(0, 8) };
 }
 
 // Capture this user's recent commits across checked-out repositories in the local source folder.
 async function loadLocalGitMetrics(username) {
   const runGit = async (directory, args) => { try { return (await execFileAsync("git", ["-C", directory, ...args], { maxBuffer: 4 * 1024 * 1024 })).stdout; } catch { return ""; } };
   const parseLines = (text) => text.split("\n").reduce((result, line) => { const match = line.trim().match(/^(\d+)\s+(\d+)\s+/); if (match) { result.additions += Number(match[1]); result.deletions += Number(match[2]); result.files += 1; } return result; }, { additions: 0, deletions: 0, files: 0 });
+  const parseCommitHistory = (text, repository) => {
+    const commits = [];
+    let current = null;
+    for (const line of text.split("\n")) {
+      if (line.startsWith("commit\t")) {
+        const [, sha, date, message] = line.split("\t");
+        current = { repo: repository, sha, date, message, source: "local", additions: 0, deletions: 0, files: 0 };
+        commits.push(current);
+        continue;
+      }
+      const match = line.trim().match(/^(\d+)\s+(\d+)\s+/);
+      if (current && match) { current.additions += Number(match[1]); current.deletions += Number(match[2]); current.files += 1; }
+    }
+    return commits;
+  };
   const sourceRoot = path.dirname(projectRoot);
   const entries = await fs.readdir(sourceRoot, { withFileTypes: true });
   const folders = [...new Set([projectRoot, ...entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(sourceRoot, entry.name))])];
@@ -173,7 +229,7 @@ async function loadLocalGitMetrics(username) {
     try { await fs.access(path.join(directory, ".git")); } catch { return null; }
     const identity = (await runGit(directory, ["config", "user.email"])).trim() || (await runGit(directory, ["config", "user.name"])).trim() || username;
     const log = await runGit(directory, ["log", "--all", "-30", "--author", identity, "--numstat", "--format=commit%x09%h%x09%aI%x09%s"]);
-    const commits = log.split("\n").filter((line) => line.startsWith("commit\t")).map((line) => { const [, sha, date, message] = line.split("\t"); return { repo: path.basename(directory), sha, date, message }; });
+    const commits = parseCommitHistory(log, path.basename(directory));
     return { commits, history: parseLines(log) };
   }));
   const valid = records.filter(Boolean);
@@ -186,6 +242,29 @@ async function loadLocalGitMetrics(username) {
 // Convert a dashboard range into a millisecond cutoff or no limit.
 function rangeCutoff(range, now) { return { "24h": now - 24 * 60 * 60 * 1000, "7d": now - 7 * 24 * 60 * 60 * 1000, "30d": now - 30 * 24 * 60 * 60 * 1000 }[range] || 0; }
 
+// Return the exact duration behind a period selector so comparisons use an equal preceding window.
+function rangeDuration(range) { return { "24h": 24 * 60 * 60 * 1000, "7d": 7 * 24 * 60 * 60 * 1000, "30d": 30 * 24 * 60 * 60 * 1000 }[range] || 0; }
+
+// Keep only commits within the selected development period when their source provides a timestamp.
+function commitsInRange(commits, cutoff) {
+  if (!cutoff) return commits || [];
+  return (commits || []).filter((commit) => new Date(commit.date || 0).getTime() >= cutoff);
+}
+
+// Combine source activity into one chronological feed while retaining the origin of every record.
+function buildCodeActivity(commits, cutoff) {
+  const ranged = commitsInRange(commits, cutoff);
+  const unique = [...new Map(ranged.map((commit) => [`${commit.source || "unknown"}:${commit.repo || ""}:${commit.sha || commit.message || ""}`, commit])).values()]
+    .sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")))
+    .slice(0, 24);
+  return {
+    commitCount: unique.length,
+    additions: unique.reduce((sum, commit) => sum + Number(commit.additions || 0), 0),
+    deletions: unique.reduce((sum, commit) => sum + Number(commit.deletions || 0), 0),
+    commits: unique
+  };
+}
+
 // Build the complete development dashboard payload with a short cache for refreshes.
 export async function loadDevelopmentMetrics(range = "all") {
   const cached = metricsCache.get(range);
@@ -195,7 +274,12 @@ export async function loadDevelopmentMetrics(range = "all") {
   const sessions = (await Promise.all(files.map(parseSession))).filter(Boolean);
   const now = Date.now();
   const cutoff = rangeCutoff(range, now);
+  const duration = rangeDuration(range);
   const scopedSessions = cutoff ? sessions.filter((session) => new Date(session.updatedAt || session.startedAt || 0).getTime() >= cutoff) : sessions;
+  const previousSessions = duration ? sessions.filter((session) => {
+    const updatedAt = new Date(session.updatedAt || session.startedAt || 0).getTime();
+    return updatedAt >= cutoff - duration && updatedAt < cutoff;
+  }) : [];
   const daily = {};
   const skills = {};
   const tools = {};
@@ -220,12 +304,36 @@ export async function loadDevelopmentMetrics(range = "all") {
   }, {})).map(([name, value]) => ({ name, ...value })).sort((left, right) => right.tokens - left.tokens);
   const scenarios = summarizeTokenScenarios(scopedSessions);
   const highestTokenSessions = scopedSessions.map((session) => ({ id: session.id, title: session.title || "Untitled conversation", workspace: path.basename(session.cwd || "") || "Unknown workspace", model: session.model || "Unknown", updatedAt: session.updatedAt, tokens: Number(session.tokenUsage?.total_tokens || 0) })).filter((session) => session.tokens > 0).sort((left, right) => right.tokens - left.tokens).slice(0, 5);
-  const [githubResult, local] = await Promise.allSettled([loadGithubMetrics(username), loadLocalGitMetrics(username)]);
+  const [githubResult, privateGithubResult, local] = await Promise.allSettled([loadGithubMetrics(username), loadPrivateGithubMetrics(username), loadLocalGitMetrics(username)]);
   const localGit = local.status === "fulfilled" ? local.value : { repository: projectRoot, repositoryCount: 0, workingTree: { additions: 0, deletions: 0, files: 0 }, commitCount: 0, commits: [], history: { additions: 0, deletions: 0, files: 0 } };
-  const github = githubResult.status === "fulfilled" ? githubResult.value : { state: "fallback", username, detail: "GitHub public API rate-limited; showing local repository history.", commitCount: localGit.commitCount, additions: localGit.history.additions, deletions: localGit.history.deletions, commits: localGit.commits };
+  const publicGithub = githubResult.status === "fulfilled" ? githubResult.value : null;
+  const privateGithub = privateGithubResult.status === "fulfilled" ? privateGithubResult.value : { state: "error", repositoryCount: 0, commitCount: 0, additions: 0, deletions: 0, files: 0, commits: [] };
+  const privateAvailable = ["ready", "partial"].includes(privateGithub.state);
+  const github = publicGithub || privateAvailable
+    ? {
+        state: "ready",
+        username,
+        publicAvailable: Boolean(publicGithub),
+        private: privateGithub,
+        commitCount: Number(publicGithub?.commitCount || 0) + Number(privateGithub.commitCount || 0),
+        additions: Number(publicGithub?.additions || 0) + Number(privateGithub.additions || 0),
+        deletions: Number(publicGithub?.deletions || 0) + Number(privateGithub.deletions || 0),
+        files: Number(publicGithub?.files || 0) + Number(privateGithub.files || 0),
+        commits: [...(publicGithub?.commits || []), ...(privateGithub.commits || [])].sort((left, right) => String(right.date).localeCompare(String(left.date))).slice(0, 8)
+      }
+    : { state: "fallback", username, private: privateGithub, detail: "GitHub public API rate-limited; showing local repository history.", commitCount: localGit.commitCount, additions: localGit.history.additions, deletions: localGit.history.deletions, commits: localGit.commits };
+  const codeActivity = buildCodeActivity([...(publicGithub?.commits || []), ...(privateGithub.commits || []), ...(localGit.commits || [])], cutoff);
   const weekSessions = sessions.filter((session) => now - new Date(session.updatedAt || session.startedAt || 0).getTime() < 7 * 24 * 60 * 60 * 1000);
-  const overview = { allTokens: sumTokenUsage(sessions).total_tokens, weekTokens: sumTokenUsage(weekSessions).total_tokens, allSessions: sessions.length, activeSessions: sessions.filter((session) => session.status === "active").length };
-  const data = { fetchedAt: new Date().toISOString(), range, overview, codex: { state: "ready", source: "本机 Codex 会话记录", sessionCount: scopedSessions.length, activeSessionCount: scopedSessions.filter((session) => session.status === "active").length, turns, toolCalls, tokenUsage: scopedTokenUsage, daily, models, scenarios, highestTokenSessions, skills: Object.entries(skills).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), tools: Object.entries(tools).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), quota: { state: "unavailable", detail: "Codex CLI 本地记录不包含账户额度或账单数据" } }, github, localGit };
+  const overview = {
+    allTokens: tokenTotal(sumTokenUsage(sessions)),
+    weekTokens: tokenTotal(sumTokenUsage(weekSessions)),
+    allSessions: sessions.length,
+    activeSessions: scopedSessions.filter((session) => session.status === "active").length,
+    tokens: tokenTotal(scopedTokenUsage),
+    sessions: scopedSessions.length,
+    comparison: duration ? { tokens: tokenTotal(sumTokenUsage(previousSessions)), sessions: previousSessions.length } : {}
+  };
+  const data = { fetchedAt: new Date().toISOString(), range, overview, codex: { state: "ready", source: "本机 Codex 会话记录", sessionCount: scopedSessions.length, activeSessionCount: scopedSessions.filter((session) => session.status === "active").length, turns, toolCalls, tokenUsage: scopedTokenUsage, daily, models, scenarios, highestTokenSessions, skills: Object.entries(skills).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), tools: Object.entries(tools).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 12), quota: { state: "unavailable", detail: "Codex CLI 本地记录不包含账户额度或账单数据" } }, github, localGit, codeActivity };
   metricsCache.set(range, { data, expiresAt: Date.now() + 30 * 1000 });
   return data;
 }

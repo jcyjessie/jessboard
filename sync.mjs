@@ -4,17 +4,23 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { loadCodexSessionSummaries } from "./metrics.mjs";
+import { loadMyWorkActions } from "./meegle-client.mjs";
 
 const runFile = promisify(execFile);
 const root = process.cwd();
 const target = path.join(root, "data", "context.json");
 const configPath = path.join(root, "sync.config.json");
-const emptyFeishu = { tasks: [], todoTasks: [], inferredTasks: [], schedule: [], notes: [], messages: [] };
+const emptyFeishu = { tasks: [], todoTasks: [], inferredTasks: [], schedule: [], notes: [], messages: [], myWorkActions: [] };
 const defaultActionability = {
   personalKeywords: ["曹逸婕", "Jessie", "@Jessie"],
   businessKeywords: ["实时&EOD", "实时和EOD", "实时", "EOD", "end of day", "real-time", "realtime", "行情", "市场数据", "图表", "K线", "K线图", "kline", "candlestick", "OHLC", "ticker", "报价", "NAV", "PnL", "shadow NAV", "基金净值", "Open API", "fund", "基金", "portfolio", "投资组合", "资产组合", "ta", "技术分析", "capital movement", "capital movements", "资金流动", "资金变动", "资金划转", "report", "报告", "multiple portfolio report", "多组合报告", "多投资组合报告", "live risk", "实时风险", "risk table", "风险表", "风险表格", "risk indicator", "风险指标", "monitor", "monitoring", "监控", "监测", "table view", "表格视图", "表视图", "graph view", "图表视图", "图形视图", "time series data", "时间序列数据", "时序数据", "mobile version", "移动端", "移动版", "home page", "homepage", "首页", "widget", "小组件", "组件", "auto ta", "自动技术分析"],
   actionKeywords: ["待办", "todo", "action item", "跟进", "处理", "确认", "补充", "完成", "评审", "查看", "回复", "安排", "测试", "发布", "更新", "负责", "review", "follow up", "confirm", "deliver", "prepare"]
 };
+
+// Emit machine-readable refresh progress for the local dashboard service.
+function reportSyncProgress(phase, details = {}) {
+  console.log(`JESSBOARD_SYNC_PROGRESS ${JSON.stringify({ phase, ...details })}`);
+}
 
 // Read a JSON file and fall back when it has not been created yet.
 async function readJson(filePath, fallback) {
@@ -36,8 +42,19 @@ async function loadSyncConfig() {
   return {
     sourceDirectory: path.resolve(root, project.sourceDirectory),
     taskTypeKey: project.taskTypeKey || "sub_task",
+    targetUserName: typeof project.targetUserName === "string" && project.targetUserName.trim() ? project.targetUserName.trim() : null,
+    targetUserEmail: typeof project.targetUserEmail === "string" && project.targetUserEmail.trim() ? project.targetUserEmail.trim() : null,
+    teamMembers: Array.isArray(project.teamMembers) ? project.teamMembers.filter((member) => member?.name && member?.email) : [],
+    businessLines: (Array.isArray(project.businessLines) ? project.businessLines : [{ name: project.teamName }])
+      .map((line) => ({ name: typeof line?.name === "string" ? line.name.trim() : "", members: Array.isArray(line?.members) ? line.members.filter((member) => member?.name && member?.email) : [] }))
+      .filter((line) => line.name),
     taskPageSize: boundedNumber(project.taskPageSize, 50, 1, 50),
-    scheduleItemLimit: boundedNumber(project.scheduleItemLimit, 50, 0, 50),
+    workflowConcurrency: boundedNumber(project.workflowConcurrency, 3, 1, 6),
+    meegle: {
+      enabled: project.meegle?.enabled !== false,
+      maxPages: boundedNumber(project.meegle?.myWorkMaxPages, 1, 1, 4),
+      timeoutMs: boundedNumber(project.meegle?.timeoutMs, 12000, 2000, 30000)
+    },
     lark: {
       calendarDays: boundedNumber(lark.calendarDays, 7, 1, 31),
       documentLimit: boundedNumber(lark.documentLimit, 100, 1, 100),
@@ -109,6 +126,29 @@ function addDays(dateText, days) {
 // Reduce text for the local snapshot without retaining full message or document content.
 function summarizeText(value, limit = 280) {
   return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, limit);
+}
+
+// Keep message task content readable without retaining Markdown table syntax in the snapshot.
+function summarizeMessageTask(value, limit = 180) {
+  const raw = String(value || "");
+  const cells = raw.split("|").map((cell) => cell.trim()).filter(Boolean);
+  const headerIndex = cells.findIndex((cell) => /^(?:模式|方案|事项|用户核心诉求|典型场景)$/u.test(cell));
+  if (headerIndex >= 0 && cells.length >= headerIndex + 6) {
+    const prefix = cells.slice(0, headerIndex).join(" ").replace(/\s+/g, " ").trim();
+    const rows = cells.slice(headerIndex + 3).filter((cell) => !/^:?-{2,}:?$/u.test(cell));
+    const outcomes = [];
+    for (let index = 0; index + 2 < rows.length && outcomes.length < 3; index += 3) outcomes.push(`${rows[index]}：${rows[index + 2]}`);
+    const structured = [prefix, ...outcomes].filter(Boolean).join("；").replace(/：；/g, "：").replace(/\s+/g, " ").trim();
+    if (structured) return structured.slice(0, limit);
+  }
+  return summarizeText(raw, limit + 80)
+    .replace(/!?\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\|\s*:?-{2,}:?\s*(?=\||$)/g, "")
+    .replace(/\s*\|\s*/g, "；")
+    .replace(/[>*_`#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
 }
 
 // Convert a Lark calendar event into the normalized schedule shape.
@@ -189,7 +229,9 @@ function inferActionTasks(notes, messages, actionability) {
     return isRelevant && hasExplicitActionCue(record.text, actionKeywords);
   }).slice(0, 20).map((record) => ({
     id: `inferred-${record.id}`,
-    title: summarizeText(record.text, 120),
+    title: record.origin === "飞书消息" ? summarizeText(record.chat, 80) || "飞书消息" : summarizeText(record.title, 120),
+    summary: record.origin === "飞书消息" ? summarizeMessageTask(record.preview, 180) : "",
+    sourceTitle: record.origin === "飞书消息" ? summarizeText(record.chat, 120) || "飞书消息" : null,
     project: record.origin,
     status: "todo",
     dueAt: null,
@@ -262,21 +304,104 @@ async function syncTodoTasks() {
   return (data.items || []).map(normalizeTodoTask);
 }
 
+// Return whether a Project work item is already in a completed state.
+function isCompletedProjectItem(item) {
+  const status = String(item.status_key || item.sub_stage || item.status || item.task_status || item.work_item_status?.state_key || "").toLowerCase();
+  return /done|complete|closed|finished|cancelled|canceled|完成|已交付|关闭|结束|终止|取消/.test(status);
+}
+
 // Translate a Project work item into the safe dashboard task shape.
-function normalizeTask(item, workflow = {}) {
-  const done = item.status_key === "done" || item.sub_stage === "done";
+function normalizeTask(item, workflow = {}, relevance = {}) {
+  // Workflow completion is authoritative when the item-level state is stale or incomplete.
+  const done = isCompletedProjectItem(item) || Number(workflow.progress) >= 100;
+  const personalAction = relevance.myWorkAction || null;
   return {
     id: `feishu-project-${item.id}`,
+    workItemId: String(item.id),
+    projectKey: item.project_key || null,
     title: item.name || "Untitled Project task",
     project: item.simple_name || item.project_key || "Feishu Project",
     status: done ? "done" : "todo",
     progress: workflow.progress ?? null,
-    nextStep: workflow.nextStep ?? null,
-    dueAt: workflow.dueAt ?? null,
+    nextStep: personalAction?.nodeName || workflow.nextStep || item.node_name || null,
+    dueAt: personalAction?.dueAt || workflow.dueAt || item.schedule_end || null,
+    workflowSourceUpdatedAt: item.updated_at_iso || null,
+    link: item.link || item.url || null,
     source: "feishu-project",
+    assignedToMe: relevance.assignedToMe === true,
+    watchedByMe: relevance.watchedByMe === true,
+    myWorkActions: personalAction?.actions || [],
+    myWorkNode: personalAction?.nodeName || null,
+    myWorkState: personalAction?.nodeState || null,
+    inBusinessScope: relevance.inBusinessScope === true || relevance.inRealtimeEodTeam === true,
+    businessLines: Array.isArray(relevance.businessLines) ? relevance.businessLines : [],
+    inRealtimeEodTeam: relevance.inRealtimeEodTeam === true,
     updatedAt: item.updated_at_iso || null,
-    createdAt: item.created_at_iso || null
+    createdAt: item.created_at_iso || null,
+    observedAt: relevance.inBusinessScope === true || relevance.inRealtimeEodTeam === true || relevance.watchedByMe === true ? new Date().toISOString() : null
   };
+}
+
+// Attach My Work action evidence and add personal Project items not covered by the business-line scope.
+function attachMyWorkActions(tasks, actions) {
+  const actionsByItemId = new Map((actions || []).map((action) => [String(action.workItemId), action]));
+  const attachedIds = new Set();
+  const scopedTasks = (tasks || []).map((task) => {
+    const itemId = String(task.workItemId || task.id || "").replace(/^feishu-project-/, "");
+    const action = actionsByItemId.get(itemId);
+    if (!action) return task;
+    attachedIds.add(itemId);
+    return {
+      ...task,
+      nextStep: action.nodeName || task.nextStep,
+      dueAt: action.dueAt || task.dueAt,
+      myWorkActions: action.actions || [],
+      myWorkNode: action.nodeName || null,
+      myWorkState: action.nodeState || null,
+      assignedToMe: true,
+      fromMyWork: true
+    };
+  });
+  const personalOnlyTasks = (actions || []).filter((action) => !attachedIds.has(String(action.workItemId))).map((action) => ({
+    id: `feishu-project-${action.workItemId}`,
+    workItemId: String(action.workItemId),
+    projectKey: action.projectKey || null,
+    title: action.title || "Untitled Project item",
+    project: action.project || "Feishu Project",
+    status: /done|complete|finished|closed|完成|结束/u.test(String(action.nodeState || "")) || Boolean(action.finishAt) ? "done" : "todo",
+    progress: null,
+    nextStep: action.nodeName || null,
+    dueAt: action.dueAt || null,
+    source: "feishu-project",
+    assignedToMe: true,
+    watchedByMe: false,
+    fromMyWork: true,
+    myWorkActions: action.actions || [],
+    myWorkNode: action.nodeName || null,
+    myWorkState: action.nodeState || null,
+    inBusinessScope: false,
+    businessLines: [],
+    inRealtimeEodTeam: false,
+    updatedAt: action.updatedAt || null,
+    createdAt: action.updatedAt || null,
+    observedAt: new Date().toISOString()
+  }));
+  return [...scopedTasks, ...personalOnlyTasks];
+}
+
+// Map an item list with a conservative fixed concurrency limit.
+async function mapWithConcurrency(items, concurrency, mapItem) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapItem(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
 }
 
 // Derive a task's current workflow progress and nearest planned end date.
@@ -323,25 +448,88 @@ function normalizeSchedules(task, response) {
   return entries;
 }
 
-// Read recent personal Project tasks and a bounded set of active workflow schedules.
-async function syncFeishuProject() {
+// Read one configured business line from Feishu Project's business-line field.
+async function fetchBusinessLineTasks(config, businessLine) {
+  const members = businessLine.members.length ? businessLine.members : config.teamMembers;
+  if (!businessLine.name || !members.length) throw new Error("sync.config.json must set a business-line name and its member scope.");
+  const python = path.join(config.sourceDirectory, ".venv", "bin", "python");
+  const script = path.join(config.sourceDirectory, "skills", "feishu-project", "scripts", "feishu_project.py");
+  try { await fs.access(python); await fs.access(script); }
+  catch { throw new Error("The configured Feishu Project team source is missing its local Python helper."); }
+  const { stdout } = await runFile(python, [script, "iteration-status-source", "--members-json", JSON.stringify(members), "--team-name", businessLine.name, "--skip-previous-iteration", "--page-size", String(config.taskPageSize), "--max-pages", "1"], { cwd: config.sourceDirectory, maxBuffer: 4 * 1024 * 1024 });
+  let source;
+  try { source = JSON.parse(stdout); }
+  catch { throw new Error("The Feishu Project team source returned unreadable data."); }
+  const tasks = new Map();
+  for (const member of source.members || []) {
+    for (const item of [...(member.today || []), ...(member.current_blockers || []), ...(member.other_current_iteration || [])]) {
+      if (!item?.id || tasks.has(String(item.id))) continue;
+      tasks.set(String(item.id), item);
+    }
+  }
+  return [...tasks.values()].map((task) => ({ ...task, businessLineScope: businessLine.name }));
+}
+
+// Read configured business-line work plus the user's Project watchlist without duplicate items.
+async function syncFeishuProject(previousTasks = [], previousSchedule = []) {
   const config = await loadSyncConfig();
-  const taskResponse = await fetchProjectData(config, [
+  reportSyncProgress("project-scope");
+  const [businessLineTasks, watchedResponse] = await Promise.all([
+    Promise.all(config.businessLines.map((businessLine) => fetchBusinessLineTasks(config, businessLine))),
+    fetchProjectData(config, [
     "work-items-cross",
     "--work-item-type-key", config.taskTypeKey,
-    "--target-user-key", "@operator",
-    "--search-field", "owner",
+    ...(config.targetUserEmail ? ["--target-email", config.targetUserEmail] : config.targetUserName ? ["--target-user-name", config.targetUserName] : ["--target-user-key", "@operator"]),
+    "--search-field", "watchers",
     "--page-size", String(config.taskPageSize),
     "--compact"
+    ])
   ]);
-  if (taskResponse.err_code !== 0 || !Array.isArray(taskResponse.data)) throw new Error(taskResponse.err_msg || "Feishu Project returned no task data.");
+  if (watchedResponse.err_code !== 0 || !Array.isArray(watchedResponse.data)) throw new Error(watchedResponse.err_msg || "Feishu Project returned no watchlist data.");
 
-  const rawTasks = taskResponse.data;
-  const scheduledTasks = rawTasks.filter((item) => item.status_key !== "done" && item.sub_stage !== "done").slice(0, config.scheduleItemLimit);
-  const schedule = [];
+  const merged = new Map();
+  businessLineTasks.flat().forEach((task) => {
+    const key = String(task.id);
+    const existing = merged.get(key);
+    merged.set(key, {
+      ...existing,
+      ...task,
+      relevance: {
+        ...(existing?.relevance || {}),
+        inBusinessScope: true,
+        businessLines: [...new Set([...(existing?.relevance?.businessLines || []), task.businessLineScope].filter(Boolean))]
+      }
+    });
+  });
+  watchedResponse.data.forEach((task) => {
+    const key = String(task.id);
+    const existing = merged.get(key);
+    merged.set(key, { ...existing, ...task, relevance: { ...(existing?.relevance || {}), watchedByMe: true } });
+  });
+
+  const rawTasks = [...merged.values()];
+  const previousById = new Map(previousTasks.map((task) => [task.id, task]));
+  const cachedWorkflows = new Map();
+  const workflowTasks = rawTasks.filter((item) => {
+    if (isCompletedProjectItem(item)) return false;
+    const cached = previousById.get(`feishu-project-${item.id}`);
+    const sourceUpdatedAt = item.updated_at_iso || null;
+    const cacheMatchesSource = cached?.workflowSourceUpdatedAt === sourceUpdatedAt
+      || (cached?.workflowSourceUpdatedAt == null && cached?.updatedAt === sourceUpdatedAt && cached?.progress != null);
+    if (!cacheMatchesSource) return true;
+    cachedWorkflows.set(String(item.id), { progress: cached.progress, nextStep: cached.nextStep, dueAt: cached.dueAt });
+    return false;
+  });
+  const activeTaskIds = new Set(rawTasks.filter((item) => {
+    const workflow = cachedWorkflows.get(String(item.id));
+    return !isCompletedProjectItem(item) && Number(workflow?.progress) < 100;
+  }).map((item) => `feishu-project-${item.id}`));
+  const schedule = previousSchedule.filter((item) => item.source === "feishu-project" && activeTaskIds.has(item.taskId));
   const scheduleFailures = [];
-  const workflows = new Map();
-  for (const task of scheduledTasks) {
+  const workflows = new Map(cachedWorkflows);
+  let completedSchedules = 0;
+  reportSyncProgress("project-workflows", { completed: completedSchedules, total: workflowTasks.length });
+  const workflowResults = await mapWithConcurrency(workflowTasks, config.workflowConcurrency, async (task) => {
     try {
       const response = await fetchProjectData(config, [
         "node-schedules",
@@ -350,17 +538,29 @@ async function syncFeishuProject() {
         "--work-item-id", String(task.id),
         "--compact"
       ]);
-      schedule.push(...normalizeSchedules(task, response));
-      workflows.set(String(task.id), summarizeWorkflow(response));
+      return { task, response };
     } catch (error) {
-      scheduleFailures.push(String(error.message || error));
+      return { task, error };
+    } finally {
+      completedSchedules += 1;
+      reportSyncProgress("project-workflows", { completed: completedSchedules, total: workflowTasks.length });
     }
-  }
-  return { tasks: rawTasks.map((task) => normalizeTask(task, workflows.get(String(task.id)))), schedule, scheduleFailures };
+  });
+  workflowResults.forEach(({ task, response, error }) => {
+    if (error) {
+      scheduleFailures.push(String(error.message || error));
+      return;
+    }
+    const workflow = summarizeWorkflow(response);
+    workflows.set(String(task.id), workflow);
+    if (Number(workflow.progress) < 100) schedule.push(...normalizeSchedules(task, response));
+  });
+  return { tasks: rawTasks.map((task) => normalizeTask(task, workflows.get(String(task.id)), task.relevance)), schedule, scheduleFailures };
 }
 
 // Write the unified snapshot while preserving unrelated local source data.
 async function syncContext() {
+  reportSyncProgress("reading-local-context");
   const previous = await readJson(target, {});
   const current = {
     codex: previous.codex || [],
@@ -378,6 +578,7 @@ async function syncContext() {
     console.warn(`Codex session sync skipped: ${current.sources.codexError}`);
   }
   try {
+    reportSyncProgress("feishu-tasks");
     current.feishu.todoTasks = await syncTodoTasks();
     current.sources.todo = "lark-task";
     delete current.sources.todoError;
@@ -387,7 +588,8 @@ async function syncContext() {
     console.warn(`Feishu Task sync skipped: ${current.sources.todoError}`);
   }
   try {
-    const project = await syncFeishuProject();
+    reportSyncProgress("project-scope");
+    const project = await syncFeishuProject(current.feishu.tasks || [], current.feishu.schedule || []);
     current.feishu = { ...emptyFeishu, ...current.feishu, tasks: project.tasks, schedule: project.schedule };
     current.sources.feishu = project.scheduleFailures.length ? "feishu-project-partial" : "feishu-project";
     delete current.sources.feishuError;
@@ -399,6 +601,23 @@ async function syncContext() {
     console.warn(`Feishu Project sync skipped: ${current.sources.feishuError}`);
   }
   try {
+    const config = await loadSyncConfig();
+    reportSyncProgress("meegle-actions");
+    const myWork = config.meegle.enabled
+      ? await loadMyWorkActions({ maxPages: config.meegle.maxPages, timeoutMs: config.meegle.timeoutMs })
+      : { state: "disabled", actions: [], detail: "Meegle enrichment is disabled." };
+    current.feishu.myWorkActions = myWork.actions || [];
+    current.feishu.tasks = attachMyWorkActions(current.feishu.tasks || [], myWork.actions);
+    current.sources.meegle = myWork.state;
+    current.sources.meegleDetail = myWork.detail;
+    delete current.sources.meegleError;
+  } catch (error) {
+    current.sources.meegle = "error";
+    current.sources.meegleError = String(error.message || error);
+    console.warn(`Meegle action sync skipped: ${current.sources.meegleError}`);
+  }
+  try {
+    reportSyncProgress("lark-context");
     const config = await loadSyncConfig();
     const lark = await syncLark(config);
     if (lark.schedule) current.feishu.schedule = uniqueById([...(current.feishu.schedule || []), ...lark.schedule]);
@@ -418,6 +637,7 @@ async function syncContext() {
     console.warn(`Lark sync skipped: ${current.sources.larkError}`);
   }
   await fs.mkdir(path.dirname(target), { recursive: true });
+  reportSyncProgress("brief");
   await fs.writeFile(target, `${JSON.stringify(current, null, 2)}\n`, "utf8");
   console.log(`Wrote ${target}`);
 }

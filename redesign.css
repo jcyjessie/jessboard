@@ -190,9 +190,10 @@ body.studio-theme .ann::after { display: none !important; }
 body.studio-theme .daily-brief-heading { margin-bottom: 16px; }
 body.studio-theme .daily-brief-heading h2 { font-size: 27px; font-weight: 800; }
 body.studio-theme .daily-brief-summary { display: none; }
-body.studio-theme .daily-main-grid { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.84fr); gap: 12px; margin-bottom: 12px; }
-body.studio-theme .meeting-brief { order: 1; min-height: 318px; background: var(--ref-paper); }
-body.studio-theme .brief-panel.priority-brief { order: 2; min-height: 318px; color: var(--ref-white); border-color: var(--ref-shell); background: var(--ref-shell); }
+body.studio-theme .daily-workstreams { display:grid; grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr); gap:12px; margin-bottom:12px; }
+body.studio-theme .daily-workstream { display:grid; gap:12px; align-content:start; min-width:0; }
+body.studio-theme .meeting-brief { min-height:0; background: var(--ref-paper); }
+body.studio-theme .brief-panel.priority-brief { min-height:0; color: var(--ref-white); border-color: var(--ref-shell); background: var(--ref-shell); }
 body.studio-theme .brief-panel,
 body.studio-theme .panel { border-color: var(--ref-line); border-radius: 20px; background: var(--ref-paper); box-shadow: none; }
 body.studio-theme .brief-panel { padding: 20px; }
@@ -209,10 +210,10 @@ body.studio-theme .priority-brief .brief-state.urgent { background: var(--ref-co
 body.studio-theme .priority-brief .brief-open { color: var(--ref-yellow); }
 body.studio-theme .meeting-brief { background: #f4f3ff; }
 body.studio-theme .meeting-brief .brief-state { color: var(--ref-ink); background: var(--ref-violet); }
-body.studio-theme .daily-secondary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
 body.studio-theme .reply-brief { background: #effcff; }
 body.studio-theme .risk-brief { border-top: 1px solid var(--ref-line); background: #fff1ee; }
 body.studio-theme .daily-closeout { border-color: var(--ref-line); border-radius: 18px; background: #f1ffe8; }
+body.studio-theme .daily-closeout[hidden] { display: none !important; }
 
 body.studio-theme .dashboard-analytics { margin: 12px 0; padding: 20px; border-radius: 20px; color: var(--ref-white); background: var(--ref-shell); }
 body.studio-theme .analytics-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -249,7 +250,10 @@ body.studio-theme .metric-card .type-bar span { min-width: 6px; height: 100%; bo
 body.studio-theme .metric-card .type-segment-1 { background: var(--ref-yellow); }
 body.studio-theme .metric-card .type-segment-2 { background: var(--ref-violet); }
 body.studio-theme .metric-card .type-segment-3 { background: var(--ref-green); }
-body.studio-theme .metric-card .type-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-self: end; margin-top: 16px; }
+body.studio-theme .metric-card .type-segment-4 { background: var(--ref-coral); }
+body.studio-theme .metric-card .type-segment-5 { background: var(--ref-cyan); }
+body.studio-theme .metric-card .type-segment-6 { background: #8a8d98; }
+body.studio-theme .metric-card .type-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(54px, 1fr)); gap: 8px; align-self: end; margin-top: 16px; }
 body.studio-theme .metric-card .type-list div { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 5px; min-width: 0; }
 body.studio-theme .metric-card .type-list i { width: 7px; height: 7px; border-radius: 50%; }
 body.studio-theme .metric-card .type-list span { overflow: hidden; color: #b8b9c0; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -286,10 +290,24 @@ body.studio-theme .task-list { gap: 9px; }
 body.studio-theme .task-row { min-height: 66px; border-color: var(--ref-line); border-radius: 15px; background: var(--ref-paper); }
 body.studio-theme .task-row:hover { border-color: var(--ref-ink); transform: translateY(-1px); }
 body.studio-theme .task-toggle { width: 21px; height: 21px; }
+body.studio-theme .task-copy { min-width: 0; }
+body.studio-theme .task-summary { display: -webkit-box; margin: 4px 0 0; overflow: hidden; color: var(--ref-muted); font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+body.studio-theme .task-source-open { align-self: center; display: inline-grid; width: 21px; height: 21px; place-items: center; color: var(--ref-muted); }
+body.studio-theme .task-meta .task-source-open { width: 16px; height: 16px; margin-left: 6px; vertical-align: middle; }
+body.studio-theme .task-source-open:hover { color: var(--ref-ink); }
+body.studio-theme .task-source-open svg { width: 14px; height: 14px; }
 body.studio-theme .task-meta .status-chip { margin-right: 3px; }
 body.studio-theme .task-list[data-layout="card"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-body.studio-theme .task-list[data-layout="card"] .task-row { min-height: 112px; grid-template-columns: auto minmax(0, 1fr) auto; align-content: start; }
-body.studio-theme .task-list[data-layout="card"] .task-due { grid-column: 2 / -1; justify-self: start; padding-left: 1px; }
+body.studio-theme .task-list[data-layout="card"] .task-row { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; padding: 13px 14px 11px; gap: 9px; }
+body.studio-theme .task-card-primary { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; }
+body.studio-theme .task-card .task-summary { margin-top: 3px; line-height: 1.4; }
+body.studio-theme .task-card-footer { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; border-top: 1px solid var(--ref-line); }
+body.studio-theme .task-card-footer .task-meta { display: flex; min-width: 0; align-items: center; gap: 5px; margin: 0; white-space: nowrap; }
+body.studio-theme .task-card-origin { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.studio-theme .task-card-actions { display: inline-flex; flex: none; align-items: center; gap: 7px; }
+body.studio-theme .task-card-actions .task-due { display: block; color: var(--ref-muted); font-size: 10px; }
+body.studio-theme .task-card-actions .task-source-open { width: 17px; height: 17px; margin: 0; }
+body.studio-theme .task-card-actions .task-delete { opacity: 1; }
 body.studio-theme .task-list[data-layout="block"] { position: relative; padding-left: 66px; }
 body.studio-theme .task-list[data-layout="block"]::before { position: absolute; top: 10px; bottom: 10px; left: 30px; width: 1px; background: var(--ref-line); content: ""; }
 body.studio-theme .task-list[data-layout="block"] .task-row { position: relative; }
@@ -348,14 +366,15 @@ body.studio-theme.focus-mode .sidebar,
 body.studio-theme.focus-mode .dashboard-analytics,
 body.studio-theme.focus-mode .projects-panel,
 body.studio-theme.focus-mode .source-strip,
-body.studio-theme.focus-mode .daily-secondary-grid { display: none; }
-body.studio-theme.focus-mode .daily-main-grid { grid-template-columns: minmax(0, 1fr) 310px; }
+body.studio-theme.focus-mode .daily-workstream-left .reply-brief,
+body.studio-theme.focus-mode .daily-workstream-right .risk-brief { display:none; }
+body.studio-theme.focus-mode .daily-workstreams { grid-template-columns:minmax(0,1fr) 310px; }
 body.studio-theme.focus-mode .main-content { border-color: var(--ref-shell); }
 
 @media (max-width: 1080px) {
   body.studio-theme .app-shell,
   body.studio-theme.sidebar-collapsed .app-shell { padding-left: 22px; }
-  body.studio-theme .daily-main-grid,
+  body.studio-theme .daily-workstreams,
   body.studio-theme .focus-layout { grid-template-columns: 1fr; }
   body.studio-theme .priority-brief { min-height: auto; }
   body.studio-theme .task-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
@@ -379,7 +398,6 @@ body.studio-theme.focus-mode .main-content { border-color: var(--ref-shell); }
   body.studio-theme .topbar-actions .primary-button { min-width: 38px; padding: 0; }
   body.studio-theme .topbar-actions .primary-button span { display: none; }
   body.studio-theme .view { padding: 20px 16px 28px; }
-  body.studio-theme .daily-secondary-grid,
   body.studio-theme .insight-grid { grid-template-columns: 1fr; }
   body.studio-theme .task-toolbar { grid-template-columns: 1fr; align-items: stretch; }
   body.studio-theme .task-toolbar-main { display: grid; grid-template-columns: auto minmax(0, 1fr); }

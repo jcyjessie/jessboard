@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { XMLParser } from "fast-xml-parser";
 import { loadDevelopmentMetrics } from "./metrics.mjs";
+import { loadProjectWorkDetail } from "./meegle-client.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -19,6 +20,7 @@ let financeDetail = "公开快讯";
 let openCliExecutable = null;
 let weatherCache = { expiresAt: 0, data: null };
 let contextRefreshPromise = null;
+let contextRefreshStatus = { refreshing: false, phase: "idle", updatedAt: null };
 const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", textNodeName: "#text", trimValues: true });
 
 // Return JSON with consistent headers for the browser client.
@@ -124,7 +126,7 @@ async function translateItems(items, maximum = Infinity) {
   let lastError = "";
   for (let index = 0; index < pending.length; index += 12) {
     const batch = pending.slice(index, index + 12);
-    const prompt = `你是资讯编辑。请把下面公开资讯翻译成简体中文。保留每个 id、URL、人名、公司名、产品名和技术词；只返回 JSON 数组，每项包含 id、title、summary，不要 Markdown，不要解释。中文要自然、简洁，适合资讯卡片。\n\n${JSON.stringify(batch.map((entry) => ({ id: entry.id, title: entry.title, summary: entry.summary, url: entry.url })))}`;
+    const prompt = `你是资讯编辑。请把下面公开资讯翻译成简体中文。保留每个 id、URL、人名、公司名、产品名和技术词；只返回 JSON 数组，每项包含 id、title、summary，不要 Markdown，不要解释。中文要自然、简洁，适合资讯卡片。title 必须是完整的核心结论，不超过 32 个汉字，不使用省略号；summary 不超过 80 个汉字。\n\n${JSON.stringify(batch.map((entry) => ({ id: entry.id, title: entry.title, summary: entry.summary, url: entry.url })))}`;
     try {
       parseTranslation(await runCodexTranslation(prompt)).forEach((entry) => { if (entry.id && entry.title) { translationCache.set(entry.id, { title: entry.title, summary: entry.summary || "暂无摘要" }); translatedCount += 1; } });
     } catch (error) { lastError = error.message; }
@@ -166,6 +168,12 @@ function extractFeedArticleUrl(value) {
   return match?.[1] || null;
 }
 
+// Remove generic feed-series labels so the article headline carries the actual news.
+function normalizeFeedHeadline(value) {
+  const title = cleanFeedText(value);
+  return title.replace(/^morning\s+minute\s*[:：-]\s*/iu, "").trim();
+}
+
 // Convert RSS and Atom documents into the normalized Jessboard item shape.
 function parseFeed(xml, feed, options = {}) {
   const document = xmlParser.parse(xml);
@@ -175,7 +183,7 @@ function parseFeed(xml, feed, options = {}) {
   return rows.map((entry) => {
     const linkValue = Array.isArray(entry.link) ? entry.link[0] : entry.link;
     const link = typeof linkValue === "object" ? linkValue?.["@_href"] : linkValue;
-    const title = cleanFeedText(entry.title);
+    const title = normalizeFeedHeadline(entry.title);
     const content = entry.description || entry.summary || entry.content || "暂无摘要";
     const summary = cleanFeedText(content);
     const publishedAt = entry.pubDate || entry.published || entry.updated;
@@ -340,16 +348,51 @@ async function loadNews() {
 // Read the local context snapshot written by the sync command.
 async function loadContext() { try { return JSON.parse(await fs.readFile(path.join(root, "data", "context.json"), "utf8")); } catch { return { codex: [], feishu: { tasks: [], schedule: [], notes: [], messages: [] }, sources: { codex: "empty", feishu: "not-configured" } }; } }
 
+// Reuse the synchronized workflow schedule when a Project capacity query is empty.
+function workItemSchedule(context, workItemId) {
+  const taskId = `feishu-project-${workItemId}`;
+  return (context.feishu?.schedule || []).filter((item) => item.source === "feishu-project" && item.taskId === taskId).map((item) => ({
+    title: item.taskTitle || "Project work item",
+    node: item.node || "Workflow stage",
+    start: item.start || null,
+    end: item.end || null,
+    points: item.points ?? null
+  }));
+}
+
+// Read optional Meegle connection settings without exposing credentials to the browser.
+async function loadMeegleOptions() {
+  try {
+    const config = JSON.parse(await fs.readFile(path.join(root, "sync.config.json"), "utf8"));
+    const meegle = config?.feishuProject?.meegle || {};
+    return { timeoutMs: meegle.timeoutMs, maxPages: meegle.myWorkMaxPages };
+  } catch { return {}; }
+}
+
 // Run one local read-only snapshot refresh and preserve the last good snapshot on partial failure.
 function refreshContext() {
   if (contextRefreshPromise) return contextRefreshPromise;
+  contextRefreshStatus = { refreshing: true, phase: "starting", updatedAt: new Date().toISOString() };
   contextRefreshPromise = new Promise((resolve, reject) => {
     const startedAt = Date.now();
     const child = spawn(process.execPath, ["sync.mjs"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
+    let progressBuffer = "";
     let settled = false;
     const timeout = setTimeout(() => child.kill("SIGTERM"), 300000);
-    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.stdout.on("data", (chunk) => {
+      const text = String(chunk);
+      output += text;
+      progressBuffer += text;
+      const lines = progressBuffer.split("\n");
+      progressBuffer = lines.pop() || "";
+      lines.forEach((line) => {
+        if (!line.startsWith("JESSBOARD_SYNC_PROGRESS ")) return;
+        try {
+          contextRefreshStatus = { refreshing: true, updatedAt: new Date().toISOString(), ...JSON.parse(line.slice("JESSBOARD_SYNC_PROGRESS ".length)) };
+        } catch { /* Ignore malformed progress output and keep the last known stage. */ }
+      });
+    });
     child.stderr.on("data", (chunk) => { output += chunk; });
     child.on("error", (error) => { if (!settled) { settled = true; clearTimeout(timeout); reject(error); } });
     child.on("close", async (code) => {
@@ -358,10 +401,12 @@ function refreshContext() {
       clearTimeout(timeout);
       try {
         const snapshot = await fs.stat(path.join(root, "data", "context.json"));
-        if (code === 0 || snapshot.mtimeMs >= startedAt) { resolve({ partial: code !== 0 }); return; }
+        if (code === 0 || snapshot.mtimeMs >= startedAt) { contextRefreshStatus = { refreshing: false, phase: "complete", updatedAt: new Date().toISOString() }; resolve({ partial: code !== 0 }); return; }
+        contextRefreshStatus = { refreshing: false, phase: "partial", updatedAt: new Date().toISOString() };
         resolve({ partial: true });
         return;
       } catch { /* No written snapshot is available to preserve. */ }
+      contextRefreshStatus = { refreshing: false, phase: "error", updatedAt: new Date().toISOString() };
       reject(new Error(output.trim() || "Snapshot refresh failed."));
     });
   }).finally(() => { contextRefreshPromise = null; });
@@ -387,6 +432,19 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "GET" && requestUrl.pathname === "/api/news") { try { sendJson(response, 200, await loadNews()); } catch (error) { sendJson(response, 502, { error: error.message }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/weather/shanghai") { try { sendJson(response, 200, await loadShanghaiWeather()); } catch (error) { sendJson(response, 502, { error: `上海天气暂不可用：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/context") { sendJson(response, 200, await loadContext()); return; }
+  if (request.method === "GET" && requestUrl.pathname === "/api/project-work-item") {
+    const projectKey = requestUrl.searchParams.get("projectKey") || "";
+    const workItemId = requestUrl.searchParams.get("workItemId") || "";
+    if (!/^[A-Za-z0-9_-]{2,100}$/.test(projectKey) || !/^\d{4,20}$/.test(workItemId)) { sendJson(response, 400, { error: "Invalid Project work item reference." }); return; }
+    try {
+      const [detail, context] = await Promise.all([loadProjectWorkDetail({ projectKey, workItemId, ...(await loadMeegleOptions()) }), loadContext()]);
+      const workflowSchedule = workItemSchedule(context, workItemId);
+      sendJson(response, 200, { ...detail, workflowSchedule, scheduleSource: detail.capacity?.length ? "capacity" : workflowSchedule.length ? "workflow" : "none" });
+    }
+    catch (error) { sendJson(response, 502, { state: "error", error: `Project detail is unavailable: ${error.message}` }); }
+    return;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/api/context/refresh-status") { sendJson(response, 200, contextRefreshStatus); return; }
   if (request.method === "POST" && requestUrl.pathname === "/api/context/refresh") { try { const refresh = await refreshContext(); const context = await loadContext(); context.refresh = refresh; sendJson(response, 200, context); } catch (error) { sendJson(response, 502, { error: `同步失败：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/dev-metrics") { try { const range = ["24h", "7d", "30d", "all"].includes(requestUrl.searchParams.get("range")) ? requestUrl.searchParams.get("range") : "all"; sendJson(response, 200, await loadDevelopmentMetrics(range)); } catch (error) { sendJson(response, 502, { error: `开发数据暂不可用：${error.message}` }); } return; }
   if (request.method === "GET" && requestUrl.pathname === "/api/health") { sendJson(response, 200, { ok: true, service: "jessboard" }); return; }

@@ -9,21 +9,25 @@
 - `design-demos.js`：处理设计预览标签切换，并同步展示对应的说明文字。
 - `DESIGN.md`：记录下一轮工作台视觉更新所采用的参考来源、设计 token、布局比例和可访问性边界。
 - `neat-annotations.css`：提供本地的手绘箭头和标记样式，仅用于状态驱动的工作提示。
-- `app.js`：维护本机任务、视图切换、专注计时、上下文状态、每日简报交互、开发分析和资讯渲染；任务支持真实到期范围、搜索、分页表格和按到期桶分组的时间轴，项目排期以工作流和交付阶段组织，专注支持时长选择与跳过，开发分析有加载和不可用状态；资讯按五类阅读入口、市场、主题、重要度和新鲜度分页为报纸版面，并在浏览器保留最近一次成功刷新结果。
+- `app.js`：维护本机任务、视图切换、专注计时、上下文状态、每日简报交互、开发分析和资讯渲染；任务支持真实到期范围、搜索、分页表格和按到期桶分组的时间轴，业务目标将参与的飞书 Project 需求和直接事项按产品目标聚合，并渲染目标投入组合、交付阶段分布与目标到来源项目的关系视图，专注支持时长选择与跳过，开发分析以当前周期指标、等长周期对比、缓存复用说明和统一可筛选的代码活动流支持判断；资讯按五类阅读入口、市场、主题、重要度和新鲜度分页为报纸版面，并在浏览器保留最近一次成功刷新结果。
+- `business-goals.js`：提供浏览器本地的业务目标归纳引擎，以领域词汇为稳定锚点，并为刷新中重复出现的新主题生成候选目标和变化摘要。
 - `work-plan.js`：根据只读的飞书 Project 工作流、日历和 Codex 会话状态生成当天优先级和日程。
 - `daily-brief.js`：从只读飞书任务、日程和消息快照筛选每日优先事项、会议准备、待确认消息、风险和闭环信息。
-- `server.mjs`：提供静态文件服务、上下文读取和手动刷新接口、`/api/dev-metrics` 开发聚合接口、`/api/news` 五类资讯聚合接口和 `/api/weather/shanghai` 天气接口；World Monitor 默认走本地 RSS 和 Ollama，最多 12 条外文重点资讯经单次本机 Codex 翻译，财经快讯经只读 OpenCLI 获取，加密资讯读取公开 RSS，托管 MCP 仅显式启用时使用。
-- `metrics.mjs`：只读取 Codex 会话的累计 Token、模型、使用场景、工具事件与安全会话摘要，并结合公开 GitHub 活动和当前仓库 Git 差异，输出不含正文和凭证的开发指标。
-- `sync.mjs`：通过相邻项目的只读飞书 Project API 帮助程序和本机已授权 Lark CLI，同步“我负责的”飞书任务、EOD Project 需求、工作流进度、日程、分页文档元数据、消息预览和安全 Codex 会话摘要到统一上下文快照；仅将带明确行动指令且与 Jessie 或实时/EOD 业务相关的内容生成为建议任务。
-- `sync.config.json`：提供不含凭证的飞书 Project、Lark CLI 同步范围和建议任务关键词配置。
+- `meegle-client.mjs`：以只读方式包装本机 Meegle CLI，读取个人 Project 待办，并按需读取某项工作流、关系、关联资料、近期变更、评论与个人排期；不保存或返回凭证。
+- `server.mjs`：提供静态文件服务、上下文读取、手动刷新和刷新进度接口、`/api/project-work-item` 按需 Project 上下文接口、`/api/dev-metrics` 开发聚合接口、`/api/news` 五类资讯聚合接口和 `/api/weather/shanghai` 天气接口；World Monitor 默认走本地 RSS 和 Ollama，最多 12 条外文重点资讯经单次本机 Codex 翻译，财经快讯经只读 OpenCLI 获取，加密资讯读取公开 RSS，托管 MCP 仅显式启用时使用。
+- `metrics.mjs`：只读取 Codex 会话的累计 Token、模型、使用场景、工具事件与安全会话摘要，并结合公开 GitHub 活动、显式授权私有仓库的提交元数据和当前仓库 Git 差异，按选定周期返回当前值、等长上一周期及带来源的统一代码活动流，输出不含正文和凭证的开发指标。
+- `sync.mjs`：通过相邻项目的只读飞书 Project API 帮助程序和本机已授权 Lark CLI，同步配置业务线内全部 Project 需求、Jessie 标记关注的事项、实际工作流状态、未完成事项的排期、分页文档元数据、消息预览和安全 Codex 会话摘要到统一上下文快照；可选 Meegle 个人待办仅附加到已在同步范围内的任务。新建或已变更工作项读取工作流，未变更项复用已验证状态，完成判断不依赖标题；仅将带明确行动指令且与 Jessie 或配置业务线相关的内容生成为建议任务。
+- `sync.config.json`：提供不含凭证的飞书 Project、Lark CLI、可选 Meegle 同步范围和建议任务关键词配置。
 - `data/context.json`：保存可安全展示的 Codex 会话摘要与飞书同步结果，不保存凭证。
 - `data/finance-news-sources.json`：声明匿名可读取的财经快讯来源和固定的 OpenCLI 读取命令。
 - `data/crypto-feeds.json`：声明匿名可读取的加密与链上 RSS 来源。
 - `package.json`：提供本机服务和同步命令。
 - `CONTEXT.md`：记录当前交付阶段和关键决定。
 
-`index.html` 依次加载 `styles.css`、`redesign.css`、`ux-refinement.css`、`work-plan.js`、`daily-brief.js` 和 `app.js`。`app.js` 将浏览器本地任务与同步的只读飞书任务统一为各个任务视图的数据源，并从 `server.mjs` 读取上下文、资讯和上海天气；它使用 `daily-brief.js` 的结果渲染首页，并只在用户确认后将消息写入浏览器本地任务。成功的资讯响应会保存到浏览器，新的刷新失败不会清空旧版内容。`redesign.css` 与 `ux-refinement.css` 只覆盖展示层，不改变上述数据来源和请求边界。`design-demos.html` 单独加载 `design-demos.css` 和 `design-demos.js`，用于切换设计主题，不会读取或写入正式任务数据。`work-plan.js` 保留直接分配的任务和 EOD 范围的 Project 任务来进行优先级计算。`metrics.mjs` 还按模型和会话中最强的已记录 skill 信号汇总 Token，后者用于测试与验收、产品规划、界面与浏览、Skill 建设和其他工作等使用场景。`sync.mjs` 调用 `workteam-morning-report` 的本地只读 Project 帮助程序，以及已授权的本机 Lark CLI；它将任务、Project 需求、工作流进度、排期、日程、分页文档标题/链接、截断后的消息预览和安全 Codex 会话摘要写入 `data/context.json`。建议任务必须同时通过 Jessie/实时-EOD 关键词和明确行动指令两层筛选，关键词可在 `sync.config.json` 调整。`server.mjs` 分别请求 AI HOT、Follow Builders、World Monitor、财经快讯和加密 RSS，单个来源失败不会影响其余来源；它为每条资讯保留原文和中文字段，并只向前端返回简洁的翻译状态。财经来源通过配置中限定的只读命令执行，加密来源直接读取公开 RSS。私有的 Codex/飞书内容只能通过 `data/context.json` 快照进入页面。
+`index.html` 依次加载 `styles.css`、`redesign.css`、`ux-refinement.css`、`business-goals.js`、`work-plan.js`、`daily-brief.js` 和 `app.js`。`app.js` 将浏览器本地任务与同步的只读飞书任务统一为各个任务视图的数据源，并从 `server.mjs` 读取上下文、资讯和上海天气；它使用 `daily-brief.js` 的结果渲染首页，并只在用户确认后将消息写入浏览器本地任务。手动刷新先请求 `/api/context/refresh-status`，再轮询真实同步阶段；Project 排期阶段携带完成数量和总数，之后会独立读取可选的 Meegle 个人待办。任务详情只有在用户点击时才请求 `/api/project-work-item`，因此工作流、依赖、关联资料、变更、评论和个人排期不进入 `data/context.json`。`business-goals.js` 会在每次上下文更新后重新归纳当前参与的飞书 Project 需求和直接事项：已有目标通过本地身份摘要保持连续，新出现且重复的主题会成为候选目标；聚合百分比只反映这些近期事项的推进情况，不替代飞书 Project 的官方进度。成功的资讯响应会保存到浏览器，新的刷新失败不会清空旧版内容。`redesign.css` 与 `ux-refinement.css` 只覆盖展示层，不改变上述数据来源和请求边界。`design-demos.html` 单独加载 `design-demos.css` 和 `design-demos.js`，用于切换设计主题，不会读取或写入正式任务数据。`work-plan.js` 保留直接分配的任务和 EOD 范围的 Project 任务来进行优先级计算。`metrics.mjs` 还按模型和会话中最强的已记录 skill 信号汇总 Token，后者用于测试与验收、产品规划、界面与浏览、Skill 建设和其他工作等使用场景；当 `JESSBOARD_GITHUB_TOKEN` 与 `JESSBOARD_GITHUB_PRIVATE_REPOSITORIES` 同时配置时，它仅查询明确列出的私有仓库，并只返回当前账号的提交元数据和变更统计。`sync.mjs` 调用 `workteam-morning-report` 的本地只读 Project 帮助程序，以及已授权的本机 Lark CLI；可选 Meegle 补充只使用已在该范围的父工作项 ID 来标示个人待办，并在 CLI 未登录时独立失败，不影响已成功的 Project 快照。建议任务必须同时通过 Jessie/实时-EOD 关键词和明确行动指令两层筛选，关键词可在 `sync.config.json` 调整。`server.mjs` 分别请求 AI HOT、Follow Builders、World Monitor、财经快讯和加密 RSS，单个来源失败不会影响其余来源；它为每条资讯保留原文和中文字段，并只向前端返回简洁的翻译状态。财经来源通过配置中限定的只读命令执行，加密来源直接读取公开 RSS。私有的 Codex/飞书内容只能通过 `data/context.json` 快照进入页面。
 
 项目保持前端和同步服务分离，原因是浏览器不能安全保存飞书授权，也可能受到跨域限制。所有外部内容都显示原文链接和来源名称。World Monitor 本地模式不需要 API Key；Ollama 或本机翻译暂不可用时保留原文，来源栏仅显示读者可理解的语言状态。托管 MCP 模式仍会在没有 API Key 时显示不可用状态。
 
-每日简报将空白日压缩为一个确认状态，避免四个同等权重的空面板分散注意力。手绘提示仅在首次同步、最高优先级和首个风险出现时显示；普通 HTML 状态文字始终保留，移动端隐藏箭头，避免其脱离正常布局后遮挡内容。
+每日简报按两条独立纵向流组织：会议准备后紧接待确认消息，优先推进后紧接风险与依赖；两列按自身内容高度延展，空状态会收紧。今日必做采用证据门槛：截止时间、外部影响加明确行动请求，或近期人工推进才会进入；“问题、优化、日志、排查”等技术词只用于待评估状态，避免自动任务占用当天优先级。群消息必须同时命中实时/EOD、行情图表、风险数据或 AI Agents 等明确业务范围，并明确提及用户，不能只因“外部业务”、PnL、交易或提及其他人而入选；私聊保留。手绘提示仅在首次同步、最高优先级和首个风险出现时显示；普通 HTML 状态文字始终保留，移动端隐藏箭头，避免其脱离正常布局后遮挡内容。
+
+业务目标可视化完全使用当前刷新产生的聚合事项：同步依据飞书 Project 的业务线字段读取配置业务线（当前为实时&EOD图表和 AI Agents / AI 前台）的全部工作项，并单独读取 Jessie 标记关注的事项；两类重合时按工作项 ID 合并，并以同步观察时间保证两类仍未完成事项不会因旧更新时间被过滤。已完成工作项始终使用飞书实际更新时间进入短期历史，工作流为 100% 也会被规范为已完成，不能因同步观察时间而回到当前视图；关注项在任务详情中明确标注。直接任务必须同时命中该范围并明确分配给当前用户；推断任务也必须命中该范围。首页只保留组合图和阶段条，避免将同一事项重复为卡片；组合图按进行中事项数量分配面积，阶段条按待确认、推进、验证和交付四种可解释状态分段；目标详情只列出待推进的真实飞书 Project 来源和直接事项。它们均不把聚合值呈现为飞书 Project 的官方完成率。
